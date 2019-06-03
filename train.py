@@ -68,11 +68,8 @@ dataset_lr = dset.ImageFolder(root=dataroot,
                                transforms.ToTensor(),
                                transforms.Normalize((.5,.5,.5), (.5,.5,.5))]))
 
-dataloader_hr = torch.utils.data.DataLoader(dataset_hr, batch_size=batch_size,
-                                            shuffle=True, num_workers=workers)
-dataloader_lr = torch.utils.data.DataLoader(dataset_lr, batch_size=batch_size,
-                                            shuffle=True, num_workers=workers)
-
+dataloader_hr = torch.utils.data.DataLoader(dataset_hr, batch_size=batch_size, num_workers=2)
+dataloader_lr = torch.utils.data.DataLoader(dataset_lr, batch_size=batch_size, num_workers=2)
 
 # Decide which device we want to run on
 device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
