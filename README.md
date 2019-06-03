@@ -5,4 +5,5 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
 ## todo
   - définir G & D
   - afficher des SR
+  - implémenter une 'content loss'
   
