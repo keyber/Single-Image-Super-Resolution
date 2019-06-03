@@ -13,7 +13,6 @@ from time import time
 import generator
 import discriminator
 
-# from IPython.display import HTML
 
 # Set random seem for reproducibility
 # manualSeed = 999
@@ -46,12 +45,12 @@ ngpu = 0
 lr = 1e-4
 
 # Batch size during training
-batch_size = 32
-n_batch = 12
+batch_size = 16
+n_batch = 1001
 
 # Number of training epochs
-num_epochs = 10
-
+num_epochs = 3
+test_first_batch = True
 
 
 # We can use an image folder dataset the way we have it setup.
@@ -68,6 +67,7 @@ dataset_lr = dset.ImageFolder(root=dataroot,
                                transforms.CenterCrop(image_size_lr[1:]),
                                transforms.ToTensor(),
                                transforms.Normalize((.5,.5,.5), (.5,.5,.5))]))
+
 dataloader_hr = torch.utils.data.DataLoader(dataset_hr, batch_size=batch_size,
                                             shuffle=True, num_workers=workers)
 dataloader_lr = torch.utils.data.DataLoader(dataset_lr, batch_size=batch_size,
@@ -79,8 +79,8 @@ device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else 
 
 
 # Create the generator and discriminator
-netG = generator.Generator(n_blocks=2, n_features=32).to(device)
-netD = discriminator.Discriminator(image_size_hr, list_n_features=[13,13,13],list_stride=[1,1,1]) .to(device) #2,1,2
+netG = generator.Generator(n_blocks=4, n_features=32).to(device)
+netD = discriminator.Discriminator(image_size_hr, list_n_features=[32,64,64], list_stride=[2,1,2]).to(device)
 
 # Handle multi-gpu if desired
 if (device.type == 'cuda') and (ngpu > 1):
@@ -97,25 +97,23 @@ criterion = nn.BCELoss()
 optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=(beta1, 0.999))
 optimizerG = optim.Adam(netG.parameters(), lr=lr, betas=(beta1, 0.999))
 
-
-# Create batch of latent vectors that we will use to visualize
-#  the progression of the generator
-#fixed_noise = torch.randn(64, nz, 1, 1, device=device)
-
-
 # Training Loop
-
 # Lists to keep track of progress
 img_list = []
 G_losses = []
 D_losses = []
-iters = 0
 t = time()
 
 
 print("Starting Training Loop...")
 for epoch in range(num_epochs):
     for i, ((img_lr, _), (img_hr, _)) in enumerate(zip(dataloader_lr, dataloader_hr)):
+        if test_first_batch and i==0:
+            with torch.no_grad():
+                fake = netG(img_lr).detach().cpu()
+            img_list.append(vutils.make_grid(fake, padding=2, normalize=True, nrow=4))
+            continue
+        
         if i == n_batch:
             break
 
@@ -164,7 +162,7 @@ for epoch in range(num_epochs):
         optimizerG.step()
 
         # Output training stats
-        if i % 50 == 0:
+        if i % 500 == 0:
             print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
                   % (epoch, num_epochs, i, len(dataloader_hr),
                      errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
@@ -172,14 +170,6 @@ for epoch in range(num_epochs):
         # Save Losses for plotting later
         G_losses.append(errG.item())
         D_losses.append(errD.item())
-
-        # Check how the generator is doing by saving G's output on fixed_noise
-        # if (iters % 100 == 0) or ((epoch == num_epochs - 1) and (i == len(dataloader_hr) - 1)):
-        #     with torch.no_grad():
-        #         fake = netG(fixed_noise).detach().cpu()
-        #     img_list.append(vutils.make_grid(fake, padding=2, normalize=True))
-
-        iters += 1
 
 print("train loop in", time() - t)
 
@@ -192,29 +182,24 @@ plt.ylabel("Loss")
 plt.legend()
 plt.show()
 
-# %%capture
 fig = plt.figure(figsize=(8, 8))
 plt.axis("off")
+
+#np.transpose inverse les axes pour remettre le channel des couleurs en dernier
 ims = [[plt.imshow(np.transpose(i, (1, 2, 0)), animated=True)] for i in img_list]
 ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
 
-# HTML(ani.to_jshtml())
-
-
-# Grab a batch of real images from the dataloader
-real_batch = next(iter(dataloader_hr))
-#print(real_batch)
 
 # Plot the real images
 plt.figure(figsize=(15, 15))
 plt.subplot(1, 2, 1)
 plt.axis("off")
-plt.title("Real Images")
-plt.imshow(np.transpose(vutils.make_grid(real_batch[0].to(device)[:64], padding=5, normalize=True).cpu(), (1, 2, 0)))
+plt.title("LR Images")
+plt.imshow(np.transpose(vutils.make_grid(next(iter(dataloader_lr))[0].to(device)[:16], padding=5, normalize=True, nrow=4).cpu(), (1, 2, 0)))
 
 # Plot the fake images from the last epoch
 plt.subplot(1, 2, 2)
 plt.axis("off")
-plt.title("Fake Images")
-#plt.imshow(np.transpose(img_list[-1], (1, 2, 0)))
+plt.title("SR Images")
+plt.imshow(np.transpose(img_list[-1][:16], (1, 2, 0)))
 plt.show()
