@@ -17,7 +17,7 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
     
   - télécharger une base de données plus simple pour les modèles que celebA (ex MNIST)
   
-  - lire artciles AmbiantGAN, et celui d'Emmanuel
+  - lire articles AmbiantGAN, et celui d'Emmanuel
   
   - comprendre le modèle d'Emmanuel (à améliorer)
   
