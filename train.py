@@ -32,7 +32,7 @@ image_size_hr = (3, 64, 64)
 image_size_lr = (3, 32, 32)  # shapes need to match the scaling
 
 # content loss weight
-k = 1e-3
+k = 1e-0
 
 # Learning rate for optimizers
 lr = 1e-4
@@ -49,7 +49,7 @@ net_g = Generator(n_blocks=4, n_features=32, scale_twice=False)
 net_d = Discriminator(image_size_hr, list_n_features=[32, 64, 64], list_stride=[2, 1, 2])
 
 # create a feature extractor
-net_feature_extractor = model_feature_extractor.vgg()
+net_feature_extractor = model_feature_extractor.MaskedVGG(0b00011)
 
 # Beta1 hyperparam for Adam optimizers
 beta1 = 0.5
@@ -229,7 +229,7 @@ def show_res(D_losses, G_losses, dataloader_lr, img_list):
     plt.axis("off")
     #np.transpose inverse les axes pour remettre le channel des couleurs en dernier
     ims = [[plt.imshow(np.transpose(i, (1, 2, 0)), animated=True)] for i in img_list]
-    ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
+    animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
     
     # Plot the LR images
     plt.figure(figsize=(15, 15))
