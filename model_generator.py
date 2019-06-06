@@ -22,7 +22,7 @@ class BasicBlock(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, n_blocks, n_features, scale_twice=False, output_channels=3):
+    def __init__(self, n_blocks, n_features, scale_twice=False, input_channels=3):
         """input_shape: taille des images en entrée
         n_feature, n_blocks : ~expressivité du modèle
         output_channels: nombre de couleurs à sortir"""
@@ -34,7 +34,7 @@ class Generator(nn.Module):
         
         self.feature = nn.Sequential(
             # entrée
-            nn.Conv2d(in_channels=3, out_channels=n_features, kernel_size=9, stride=1, padding=4),
+            nn.Conv2d(in_channels=input_channels, out_channels=n_features, kernel_size=9, stride=1, padding=4),
             nn.PReLU(),
 
             # liste de blocks
@@ -68,8 +68,9 @@ class Generator(nn.Module):
                 nn.PReLU(),
         
                 # sortie
-                nn.Conv2d(in_channels=n_features // 16, out_channels=output_channels, kernel_size=3, stride=1, padding=1))
-            # sigmoid ?
+                nn.Conv2d(in_channels=n_features // 16, out_channels=input_channels, kernel_size=3, stride=1, padding=1)
+                # sigmoid ?
+            )
         
     def forward(self, x):
         # print(x.shape)
