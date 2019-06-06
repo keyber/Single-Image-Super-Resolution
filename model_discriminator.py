@@ -21,34 +21,33 @@ class Discriminator(nn.Module):
         super().__init__()
         w = input_shape[1]
         h = input_shape[2]
-        assert w==h
+        assert w == h
         for x in list_stride:
-            assert x in (1,2)
-        assert w*h % 4**(sum(list_stride) - len(list_stride)) == 0
+            assert x in (1, 2)
+        assert w * h % 4 ** (sum(list_stride) - len(list_stride)) == 0
         
         assert len(list_n_features) == len(list_stride) + 1
         
+        self.fc_in = w * h * list_n_features[-1] // (4 ** (sum(list_stride) - len(list_stride)))
         
-        self.fc_in = w*h*list_n_features[-1]//(4**(sum(list_stride) - len(list_stride)))
-
         self.conv = nn.Sequential(
             # entrée
             nn.Conv2d(in_channels=input_shape[0], out_channels=list_n_features[0], kernel_size=3, stride=1, padding=1),
             nn.LeakyReLU(),
-
+            
             # liste de blocks
-            nn.Sequential(*[BasicBlock(list_n_features[i], list_n_features[i+1], list_stride[i]) for
-                            i in range(1, len(list_n_features) - 1)])
+            nn.Sequential(*[BasicBlock(list_n_features[i], list_n_features[i + 1], list_stride[i])
+                            for i in range(1, len(list_n_features) - 1)])
         )
-
+        
         self.fc = nn.Sequential(
             # sortie
-            nn.Linear(self.fc_in, list_n_features[-1]*2),
+            nn.Linear(self.fc_in, list_n_features[-1] * 2),
             nn.LeakyReLU(),
-
-            nn.Linear(list_n_features[-1]*2, 1),
+            
+            nn.Linear(list_n_features[-1] * 2, 1),
             nn.Sigmoid())
-
+    
     def forward(self, x):
         # print("dis", x.shape)
         x = self.conv(x)
@@ -56,4 +55,3 @@ class Discriminator(nn.Module):
         x = self.fc(x)
         # print("dis", x.shape)
         return x
-

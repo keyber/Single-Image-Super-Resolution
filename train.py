@@ -25,7 +25,7 @@ print("Random Seed: ", seed)
 random.seed(seed)
 torch.manual_seed(seed)
 
-use_mnist = False
+use_mnist = True
 
 # Root directory for dataset
 if use_mnist:
@@ -34,9 +34,9 @@ else:
     dataroot = "/local/beroukhim/data/celeba"
 
 # Number of GPUs available. Use 0 for CPU mode.
-ngpu = 0
+ngpu = 1
 
-scale_twice = True
+scale_twice = False
 
 
 if use_mnist:
@@ -63,10 +63,10 @@ lr = 1e-4
 
 # Batch size during training
 batch_size = 16
-n_batch = 1
+n_batch = -1
 
 # Number of training epochs
-num_epochs = 3
+num_epochs = 10
 
 # Create the generator and discriminator
 net_g = Generator(n_blocks=8, n_features=64, scale_twice=scale_twice, input_channels=1 if use_mnist else 3)
@@ -76,7 +76,7 @@ net_d = Discriminator(image_size_hr, list_n_features=[64, 64, 128, 128, 256], li
 net_feature_extractor = model_feature_extractor.MaskedVGG(0b00011)
 
 # Beta1 hyperparam for Adam optimizers
-beta1 = 0.5
+beta1 = 0.9
 
 # utilise le premier batch pour l'affichage
 test_last_batch = True
@@ -151,7 +151,7 @@ def train_loop(criterion, dataloader_hr, dataloader_lr, optimizerD, optimizerG):
     img_list = []
     G_losses = []
     D_losses = []
-    print_period = max(1, n_batch//10)
+    print_period = max(1, (n_batch if n_batch!=-1 else len(dataloader_hr))//10)
     t = time()
     test_lr, test_hr = None, None
     errG_cont = None
@@ -164,14 +164,13 @@ def train_loop(criterion, dataloader_hr, dataloader_lr, optimizerD, optimizerG):
             
             if i == n_batch or i == len(dataloader_hr)-1:
                 test_lr, test_hr = img_lr, img_hr
-                save_curr_vis(img_list, test_lr, net_g)
+                save_curr_vis(img_list, test_lr, net_g, G_losses, D_losses)
                 break
             
             real = img_hr
             
             # Generate fake image batch with G
             fake = net_g(img_lr)
-            
             
             # Update the Discriminator with adversarial loss
             net_d.zero_grad()
@@ -261,7 +260,7 @@ def content_loss_g(real, fake):
 
 import multiprocessing
 print_process = None
-def save_curr_vis(img_list, img_lr, netG):
+def save_curr_vis(img_list, img_lr, netG, G_losses, D_losses):
     global print_process
     
     with torch.no_grad():
@@ -269,7 +268,13 @@ def save_curr_vis(img_list, img_lr, netG):
     img_list.append(vutils.make_grid(fake, padding=2, normalize=True, nrow=4))
     
     def f():
+        plt.figure()
+        plt.subplot(1,2,1)
         plt.imshow(np.transpose(img_list[-1][:16], (1, 2, 0)))
+        plt.subplot(1,2,2)
+        plt.plot(G_losses, label="G")
+        plt.plot(D_losses, label="D")
+        plt.legend()
         plt.show()
     
     if print_process is not None:

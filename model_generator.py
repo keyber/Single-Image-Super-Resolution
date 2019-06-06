@@ -16,10 +16,6 @@ class BasicBlock(nn.Module):
         out = self.layers(x)
         return residual + out
 
-    @staticmethod
-    def create_seq(n_blocks, n_features):
-        return nn.Sequential(*[BasicBlock(n_features) for _ in range(n_blocks)])
-
 
 class Generator(nn.Module):
     def __init__(self, n_blocks, n_features, scale_twice=False, input_channels=3):
@@ -32,18 +28,15 @@ class Generator(nn.Module):
         if scale_twice:
             assert n_features % 16 == 0
         
-        self.feature = nn.Sequential(
-            # entrée
+        self.first_layers = nn.Sequential(
             nn.Conv2d(in_channels=input_channels, out_channels=n_features, kernel_size=9, stride=1, padding=4),
-            nn.PReLU(),
-
-            # liste de blocks
-            BasicBlock.create_seq(n_blocks, n_features),
-
-            # fin des blocks
+            nn.PReLU())
+        
+        self.block_list = nn.Sequential(*[BasicBlock(n_features) for _ in range(n_blocks)])
+        
+        self.block_list_end = nn.Sequential(
             nn.Conv2d(in_channels=n_features, out_channels=n_features, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(num_features=n_features),
-
         )
         
         if not scale_twice:
@@ -54,7 +47,8 @@ class Generator(nn.Module):
                 nn.PReLU(),
     
                 # sortie
-                nn.Conv2d(in_channels=n_features // 4, out_channels=output_channels, kernel_size=3, stride=1, padding=1))
+                nn.Conv2d(in_channels=n_features // 4, out_channels=input_channels, kernel_size=3, stride=1, padding=1),
+                nn.Tanh())
         else:
             self.upscale = nn.Sequential(
                 # upscale1
@@ -68,18 +62,25 @@ class Generator(nn.Module):
                 nn.PReLU(),
         
                 # sortie
-                nn.Conv2d(in_channels=n_features // 16, out_channels=input_channels, kernel_size=3, stride=1, padding=1)
-                # sigmoid ?
+                nn.Conv2d(in_channels=n_features // 16, out_channels=input_channels, kernel_size=3, stride=1, padding=1),
+                nn.Tanh()
             )
         
     def forward(self, x):
-        # print(x.shape)
+        # print("gen", x.shape)
         # for l in self.layers:
         #     print(l)
         #     x = l(x)
         #     print(x.shape)
-        x = self.feature(x)
-        # print("gen", x.shape)
+        
+        x = self.first_layers(x)
+        residual = x
+        
+        x = self.block_list(x)
+        
+        x = self.block_list_end(x)
+        
+        x = x + residual
         x = self.upscale(x)
         # print("gen", x.shape)
         return x

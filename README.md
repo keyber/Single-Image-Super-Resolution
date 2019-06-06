@@ -18,6 +18,10 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
 
 ## todo
   - finir l'implémentation de SRGAN
+    - initialisations
+    - residual blocks
+    - poids de la content loss
+    - lr_decay
     - télécharger la même base de données que dans l'article pour pouvoir comparer
     
   - comprendre le modèle d'Emmanuel (à améliorer)
