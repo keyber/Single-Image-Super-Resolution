@@ -1,5 +1,3 @@
-from __future__ import print_function
-
 import torch.utils.data
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
@@ -13,11 +11,9 @@ import os
 from config import *
 
 
-
 def main():
     # Initialize BCELoss function  #binary cross entropy
     criterion = nn.BCELoss()
-    
     
     # We can use an image folder dataset the way we have it setup.
     # Create the datasets and the dataloaders
@@ -55,7 +51,7 @@ def main():
     D_losses, G_losses, show_im = train_loop(criterion, dataloader_hr, dataloader_lr)
 
     # Affichage des résultats
-    show_res(D_losses, G_losses, show_im)
+    save_and_show(D_losses, G_losses, show_im)
 
 
 def train_loop(criterion, dataloader_hr, dataloader_lr):
@@ -180,6 +176,7 @@ def content_loss_g(content_extractor, real, fake):
     b = content_extractor(fake)
     return torch.mean(torch.pow(a - b, 2))
 
+
 import multiprocessing
 print_process = None
 def save_curr_vis(img_list, img_lr, netG, G_losses, D_losses):
@@ -207,31 +204,13 @@ def save_curr_vis(img_list, img_lr, netG, G_losses, D_losses):
         print_process.start()
 
 
-def show_res(D_losses, G_losses, show_im):
+def save_and_show(D_losses, G_losses, show_im):
     if print_process is not None:
         print_process.terminate()
-    
-    if not os.path.isdir(write_root):
-        os.mkdir(write_root)
-        
-    i = 0
-    path = write_root + str(i)
-    while os.path.isfile(path) or os.path.isfile(path+"_ani.mp4"):
-        i += 1
-        path = write_root + str(i)
-        
-    # torch.save({
-    #     'net_g': net_g.state_dict(),
-    #     'net_d': net_d.state_dict(),
-    #     'opti_g': optimizerG.state_dict(),
-    #     'opti_d': optimizerD.state_dict()
-    # }, path)
-    
-    print("réseau sauvegardé dans le fichier", path)
 
     if not plot_training:
         # attend que l'utilisateur soit là pour créer des figures
-        input("modèle écrit, appuyer sur une touche pour afficher")
+        input("appuyer sur une touche pour afficher")
     
     test_lr, test_hr, img_list = show_im
     
@@ -251,7 +230,6 @@ def show_res(D_losses, G_losses, show_im):
     # il faut stocker l'animation dans une variable sinon l'animation plante
     ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
     writer = animation.writers['ffmpeg'](fps=1, bitrate=1800)
-    ani.save(path+"_ani.mp4", writer=writer)
 
     plt.figure(figsize=(15, 8))
     # Plot the LR images
@@ -274,6 +252,27 @@ def show_res(D_losses, G_losses, show_im):
     plt.title("SR Images")
     plt.imshow(np.transpose(img_list[-1], (1, 2, 0)))
     plt.show()
+
+    if not input("sauvegarder ? Y/n") == "n":
+        if not os.path.isdir(write_root):
+            os.mkdir(write_root)
+    
+        i = 0
+        write_path = write_root + str(i)
+        while os.path.isfile(write_path) or os.path.isfile(write_path + "_ani.mp4"):
+            i += 1
+            write_path = write_root + str(i)
+    
+        torch.save({
+            'net_g': net_g.state_dict(),
+            'net_d': net_d.state_dict(),
+            'opti_g': optimizerG.state_dict(),
+            'opti_d': optimizerD.state_dict()
+        }, write_path)
+        ani.save(write_path + "_ani.mp4", writer=writer)
+    
+        print("réseau et animations sauvegardés dans le fichier", write_path)
+
 
 if __name__ == '__main__':
     main()

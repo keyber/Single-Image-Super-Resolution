@@ -12,22 +12,19 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
     - Implémentation de SRGAN
       - adverserial loss: Generator et Disciminator customisables
       - content loss via MaskedVGG (concaténation de VGG22, VG54, ...)
-    - Lecture de AmbientGAN et de l'article d'Emmanuel
+      - initialisation par défaut de PyTorch, on peut utiliser une MSE pendant 1 epoch comme initialisation
+      ![Résultats SRGAN](./results//SRGANx16_VGG0b01111_weight1.png)
     - Exécution du code sur GPU
-    - téléchargement de MNIST (base de données plus simple pour les modèles)
+    - Sauvegarde des réseaux entraînés
+    - Lecture de AmbientGAN et de l'article d'Emmanuel
+    - téléchargement de MNIST (base de données plus simple pour les modèles). Pas pratique au final car images trop petites (et un seul channel)
 
 ## todo
-  - finir l'implémentation de SRGAN
-    - initialisations
-    - residual blocks
+  - améliorations de l'implémentation de SRGAN (résultats déjà excellent)
     - poids de la content loss
     - lr_decay
     - télécharger la même base de données que dans l'article pour pouvoir comparer
     
   - comprendre le modèle d'Emmanuel (à améliorer)
   
-  - prendre en main le framework d'Emmanuel
-  
-  
-  
-  
+  - prendre en main le framework d'Emmanuel  
