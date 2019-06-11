@@ -8,7 +8,13 @@ maxPoolInd = ( 4,   9,  18,  27,  36)
 # taille des feature map (pour les tests)
 layersSize = (64, 128, 256, 512, 512) # les deux derniers sont bien à 512
 
+def identity():
+    """mène à une simple MSE entre les deux images"""
+    return nn.Identity()
+    
 def vgg_4conv_1maxPool():
+    """récupère la feature map de VGG avant le deuxième maxPool
+    shape: (b_s, 128, 64, 64)"""
     vgg_ = models.vgg19(pretrained=True)
     
     # on garde toutes les couches avant la deuxième convolution
@@ -24,6 +30,8 @@ def vgg_4conv_1maxPool():
     return vgg_
 
 class MaskedVGG(nn.Module):
+    """concatène les feature map de VGG avant les maxPool dont le bit correspondant vaut 1
+    shape: (b_s, -1)"""
     def __init__(self, mask):
         super().__init__()
 

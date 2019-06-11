@@ -2,6 +2,7 @@ import torch.nn as nn
 
 
 class BasicBlock(nn.Module):
+    """Block RESIDUEL utilisé par G"""
     def __init__(self, n_features):
         super().__init__()
         self.layers = nn.Sequential(
@@ -19,9 +20,9 @@ class BasicBlock(nn.Module):
 
 class Generator(nn.Module):
     def __init__(self, n_blocks, n_features, scale_twice=False, input_channels=3):
-        """input_shape: taille des images en entrée
-        n_feature, n_blocks : ~expressivité du modèle
-        output_channels: nombre de couleurs à sortir"""
+        """n_blocks, n_features : ~expressivité du modèle
+        input_channels: nombre de couleurs en entrée et en sortie
+        scale_twice: False: x4 pixels, True: x16  pixels"""
         super().__init__()
         
         assert n_features % 4 == 0
