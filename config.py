@@ -1,4 +1,3 @@
-from __future__ import print_function
 import random
 import torch.nn as nn
 import torch.optim as optim
@@ -74,7 +73,7 @@ if image_size_lr[0]==1:
 else:
     net_content_extractor = model_content_extractor.MaskedVGG(0b01111)
 
-n0=0
+n0 = 0
 def loss_weight_adv_d(i):
     return i>=n0
 
@@ -113,3 +112,14 @@ if (device.type == 'cuda') and (ngpu > 1):
 # Setup Adam optimizers for both G and D
 optimizerG = optim.Adam(net_g.parameters(), lr=lr, betas=(beta1, 0.999))
 optimizerD = optim.Adam(net_d.parameters(), lr=lr, betas=(beta1, 0.999))
+
+try:
+    path = input("entrer le chemin de sauvegarde du réseau à charger")
+    checkpoint = torch.load(path)
+    net_g.load_state_dict(checkpoint['net_g'])
+    net_d.load_state_dict(checkpoint['net_d'])
+    optimizerG.load_state_dict(checkpoint['opti_g'])
+    optimizerD.load_state_dict(checkpoint['opti_d'])
+    print("lecture réussie")
+except Exception as e:
+    print("lecture échouée", e)
