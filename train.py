@@ -184,7 +184,7 @@ def save_curr_vis(img_list, img_lr, netG, G_losses, D_losses):
     
     with torch.no_grad():
         fake = netG(img_lr[:16]).detach().cpu()
-    img_list.append(vutils.make_grid(fake, padding=2, normalize=True, nrow=4))
+    img_list.append(vutils.make_grid(fake, padding=0, normalize=True, nrow=4))
     
     def f():
         plt.figure()
