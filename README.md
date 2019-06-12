@@ -24,6 +24,7 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
     - poids de la content loss
     - lr_decay
     - télécharger la même base de données que dans l'article pour pouvoir comparer
+    - ajouter des tests
     
   - comprendre le modèle d'Emmanuel (à améliorer)
   
