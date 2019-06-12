@@ -31,7 +31,8 @@ def vgg_4conv_1maxPool():
 
 class MaskedVGG(nn.Module):
     """concatène les feature map de VGG avant les maxPool dont le bit correspondant vaut 1
-    shape: (b_s, -1)"""
+    shape: (b_s, -1)
+    la partie feature extraction de vgg peut s'appliquer indépendament de la taille des images car ceux sont des conv2D, ReLU, MaxPool """
     def __init__(self, mask):
         super().__init__()
 
