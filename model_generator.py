@@ -73,7 +73,6 @@ class Generator(nn.Module):
         #     print(l)
         #     x = l(x)
         #     print(x.shape)
-        
         x = self.first_layers(x)
         residual = x
         

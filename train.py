@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from time import time
 import torchvision
+import torch.nn.functional
+import torchvision.transforms.functional
 import os
 from config import *
 
@@ -25,13 +27,6 @@ def main():
                                            torchvision.transforms.Normalize((0.5,), (0.5,)),
                                            #torchvision.transforms.Normalize((0.1307,), (0.3081,)), #mean std
                                        ]))
-        
-        dataset_lr = torchvision.datasets.MNIST(dataroot, train=True, download=True,
-                                       transform=torchvision.transforms.Compose([
-                                           transforms.Resize(image_size_lr[1:]),
-                                           torchvision.transforms.ToTensor(),
-                                           torchvision.transforms.Normalize((0.5,), (0.5,)),
-                                       ]))
     else:
         dataset_hr = dset.ImageFolder(root=dataroot,
                                       transform=transforms.Compose([
@@ -39,26 +34,20 @@ def main():
                                        transforms.CenterCrop(image_size_hr[1:]),
                                        transforms.ToTensor(),
                                        transforms.Normalize((.5,.5,.5), (.5,.5,.5))]))
-        dataset_lr = dset.ImageFolder(root=dataroot,
-                                      transform=transforms.Compose([
-                                       transforms.Resize(image_size_lr[1:]),
-                                       transforms.CenterCrop(image_size_lr[1:]),
-                                       transforms.ToTensor(),
-                                       transforms.Normalize((.5,.5,.5), (.5,.5,.5))]))
     dataloader_hr = torch.utils.data.DataLoader(dataset_hr, batch_size=batch_size, num_workers=2)
-    dataloader_lr = torch.utils.data.DataLoader(dataset_lr, batch_size=batch_size, num_workers=2)
     
-    D_losses, G_losses, show_im = train_loop(criterion, dataloader_hr, dataloader_lr)
+    D_losses, G_losses, cont_loss, show_im = train_loop(criterion, dataloader_hr)
 
     # Affichage des résultats
-    save_and_show(D_losses, G_losses, show_im)
+    save_and_show(D_losses, G_losses, cont_loss, show_im)
 
 
-def train_loop(criterion, dataloader_hr, dataloader_lr):
+def train_loop(criterion, dataloader_hr):
     # Lists to keep track of progress
     img_list = []
     G_losses = []
     D_losses = []
+    cont_losses = []
     i_tot = 0
     
     _zero = torch.zeros(1).to(device)
@@ -68,13 +57,13 @@ def train_loop(criterion, dataloader_hr, dataloader_lr):
     
     print("Starting Training Loop...")
     for epoch in range(num_epochs):
-        for i, ((img_lr, _), (img_hr, _)) in enumerate(zip(dataloader_lr, dataloader_hr)):
-            img_lr = img_lr.to(device)
+        for i, (img_hr, _) in enumerate(dataloader_hr):
             img_hr = img_hr.to(device)
+            img_lr = torch.nn.functional.interpolate(img_hr, scale_factor=1/4 if scale_twice else 1/2,mode='bicubic')
             
             if i == n_batch or i == len(dataloader_hr)-1:
                 test_lr, test_hr = img_lr, img_hr
-                save_curr_vis(img_list, test_lr, net_g, G_losses, D_losses)
+                save_curr_vis(img_list, test_lr, test_hr, net_g, G_losses, D_losses, cont_losses)
                 break
             
             real = img_hr
@@ -104,7 +93,12 @@ def train_loop(criterion, dataloader_hr, dataloader_lr):
             # content loss
             lw_cont, content_extractor = loss_weight_cont(i_tot)
             if lw_cont and content_extractor is not None :
-                errG_cont = lw_cont * content_loss_g(content_extractor, real, fake)
+                if content_loss_on_lr:
+                    fake_bruitee = torch.nn.functional.interpolate(fake, scale_factor=1/4 if scale_twice else 1/2,mode='bicubic')
+                    err = content_loss_g(content_extractor, img_lr, fake_bruitee)
+                else:
+                    err = content_loss_g(content_extractor, real, fake)
+                errG_cont = lw_cont * err
             else:
                 errG_cont = _zero
             
@@ -119,12 +113,13 @@ def train_loop(criterion, dataloader_hr, dataloader_lr):
                          errD.item(), errG_adv.item(), errG_cont.item(), D_x, D_G_z1, D_G_z2))
             
             # Save Losses for plotting later
-            G_losses.append(errG.item())
+            G_losses.append(errG_adv.item())
             D_losses.append(errD.item())
+            cont_losses.append(errG_cont.item())
             i_tot += 1
     
     print("train loop in", time() - t)
-    return D_losses, G_losses, (test_lr, test_hr, img_list)
+    return D_losses, G_losses, cont_losses, (test_lr, test_hr, img_list)
 
 
 def adversarial_loss_d(criterion, real, fake):
@@ -179,20 +174,23 @@ def content_loss_g(content_extractor, real, fake):
 
 import multiprocessing
 print_process = None
-def save_curr_vis(img_list, img_lr, netG, G_losses, D_losses):
+def save_curr_vis(img_list, img_lr, img_hr, netG, G_losses, D_losses, cont_losses):
     global print_process
     
     with torch.no_grad():
-        fake = netG(img_lr[:16]).detach().cpu()
-    img_list.append(vutils.make_grid(fake, padding=0, normalize=True, nrow=4))
+        fake_sr = netG(img_lr[:4]).detach().cpu()
+        fake_usr = netG(img_hr[:4]).detach().cpu()
+    img_list.append((vutils.make_grid(fake_sr, padding=0, normalize=True, nrow=2),
+                     vutils.make_grid(fake_usr, padding=0, normalize=True, nrow=2)))
     
     def f():
         plt.figure()
         plt.subplot(1,2,1)
-        plt.imshow(np.transpose(img_list[-1], (1, 2, 0)))
+        plt.imshow(np.transpose(img_list[-1][0], (1, 2, 0)))
         plt.subplot(1,2,2)
         plt.plot(G_losses, label="G")
         plt.plot(D_losses, label="D")
+        plt.plot(cont_losses, label="cont")
         plt.legend()
         plt.show()
     
@@ -204,7 +202,7 @@ def save_curr_vis(img_list, img_lr, netG, G_losses, D_losses):
         print_process.start()
 
 
-def save_and_show(D_losses, G_losses, show_im):
+def save_and_show(D_losses, G_losses, cont_losses, show_im):
     if print_process is not None:
         print_process.terminate()
 
@@ -218,6 +216,7 @@ def save_and_show(D_losses, G_losses, show_im):
     plt.title("Generator and Discriminator Loss During Training")
     plt.plot(G_losses, label="G")
     plt.plot(D_losses, label="D")
+    plt.plot(cont_losses, label="cont")
     plt.xlabel("iterations")
     plt.ylabel("Loss")
     plt.legend()
@@ -225,7 +224,7 @@ def save_and_show(D_losses, G_losses, show_im):
     fig = plt.figure(figsize=(8, 8))
     plt.axis("off")
     # np.transpose inverse les axes pour remettre le channel des couleurs en dernier
-    ims = [[plt.imshow(np.transpose(i, (1, 2, 0)), animated=True)] for i in img_list]
+    ims = [[plt.imshow(np.transpose(i[0], (1, 2, 0)), animated=True)] for i in img_list]
     
     # il faut stocker l'animation dans une variable sinon l'animation plante
     ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
@@ -233,24 +232,30 @@ def save_and_show(D_losses, G_losses, show_im):
 
     plt.figure(figsize=(15, 8))
     # Plot the LR images
-    plt.subplot(1, 3, 1)
+    plt.subplot(2, 2, 1)
     plt.axis("off")
     plt.title("LR Images")
     plt.imshow(np.transpose(
-        vutils.make_grid(test_lr.to(device)[:16], padding=0, normalize=True, nrow=4).cpu(), (1, 2, 0)))
+        vutils.make_grid(test_lr.to(device)[:4], padding=0, normalize=True, nrow=2).cpu(), (1, 2, 0)))
 
     # Plot the HR images
-    plt.subplot(1, 3, 3)
+    plt.subplot(2, 2, 3)
     plt.axis("off")
     plt.title("HR Images")
     plt.imshow(np.transpose(
-        vutils.make_grid(test_hr.to(device)[:16], padding=0, normalize=True, nrow=4).cpu(), (1, 2, 0)))
+        vutils.make_grid(test_hr.to(device)[:4], padding=0, normalize=True, nrow=2).cpu(), (1, 2, 0)))
     
     # Plot the SR from the last epoch
-    plt.subplot(1, 3, 2)
+    plt.subplot(2, 2, 2)
     plt.axis("off")
     plt.title("SR Images")
-    plt.imshow(np.transpose(img_list[-1], (1, 2, 0)))
+    plt.imshow(np.transpose(img_list[-1][0], (1, 2, 0)))
+
+    # Plot the SR from the last epoch
+    plt.subplot(2, 2, 4)
+    plt.axis("off")
+    plt.title("USR Images")
+    plt.imshow(np.transpose(img_list[-1][1], (1, 2, 0)))
     plt.show()
 
     if not input("sauvegarder ? Y/n") == "n":
