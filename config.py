@@ -22,19 +22,22 @@ torch.manual_seed(seed)
 use_mnist = False
 
 # false: x4 pixels   -  true: x16
-scale_twice = True
+scale_twice = False
+
+# content loss sur les images basse résolution comme dans AmbientGAN
+content_loss_on_lr = False
 
 # Number of GPUs available. Use 0 for CPU mode.
 ngpu = 1
 
 #root directory for trained models
-write_root = "/local/ruelp/srgan_trained/"
+write_root = "/local/beroukhim/srgan_trained/"
 
 # Root directory for dataset
 if use_mnist:
-    dataroot = "/local/ruelp/data/mnist"
+    dataroot = "/local/beroukhim/data/mnist"
 else:
-    dataroot = "/local/ruelp/data/celeba"
+    dataroot = "/local/beroukhim/data/celeba"
 
 if use_mnist:
     # Spatial size of training images. All images will be resized to this size using a transformer.
@@ -57,10 +60,10 @@ lr = 1e-4
 
 # Batch size during training
 batch_size = 16
-n_batch = 2
+n_batch = -1
 
 # Number of training epochs
-num_epochs = 2
+num_epochs = 3
 
 # Create the generator and discriminator
 net_g = Generator(n_blocks=16, n_features=64, scale_twice=scale_twice, input_channels=1 if use_mnist else 3)
@@ -73,7 +76,7 @@ if image_size_lr[0]==1:
 else:
     net_content_extractor = model_content_extractor.MaskedVGG(0b01111)
 
-n0 = 0
+n0 = 10
 def loss_weight_adv_d(i):
     return i>=n0
 
@@ -81,9 +84,12 @@ def loss_weight_adv_g(i):
     return i>=n0
 
 def loss_weight_cont(i):
-    if i < n0:
+    if content_loss_on_lr:
         return 1, identity
-    return 1, net_content_extractor
+    else:
+        if i < n0:
+            return 1, identity
+        return 1, net_content_extractor
 
 # Beta1 hyperparam for Adam optimizers
 beta1 = 0.9
@@ -114,7 +120,7 @@ optimizerG = optim.Adam(net_g.parameters(), lr=lr, betas=(beta1, 0.999))
 optimizerD = optim.Adam(net_d.parameters(), lr=lr, betas=(beta1, 0.999))
 
 try:
-    path = input("entrer le chemin de sauvegarde du réseau à charger")
+    path = input("entrer le chemin de sauvegarde du réseau à charger:\n")
     checkpoint = torch.load(path)
     net_g.load_state_dict(checkpoint['net_g'])
     net_d.load_state_dict(checkpoint['net_d'])
@@ -123,3 +129,4 @@ try:
     print("lecture réussie")
 except Exception as e:
     print("lecture échouée", e)
+
