@@ -1,35 +1,16 @@
 import torch.utils.data
-import torchvision.datasets as dset
-import torchvision.transforms as transforms
-from time import time
-import torchvision
+import torch.nn
 import torch.nn.functional
-import torchvision.transforms.functional
+
+from time import time
 import utils
 from config import *
 
 
 def main():
     # Initialize BCELoss function  #binary cross entropy
-    criterion = nn.BCELoss()
+    criterion = torch.nn.BCELoss()
     
-    # We can use an image folder dataset the way we have it setup.
-    # Create the datasets and the dataloaders
-    if use_mnist:
-        dataset_hr = torchvision.datasets.MNIST(dataroot, train=True, download=True,
-                                       transform=torchvision.transforms.Compose([
-                                           transforms.Resize(image_size_hr[1:]),
-                                           torchvision.transforms.ToTensor(),
-                                           torchvision.transforms.Normalize((0.5,), (0.5,)),
-                                           #torchvision.transforms.Normalize((0.1307,), (0.3081,)), #mean std
-                                       ]))
-    else:
-        dataset_hr = dset.ImageFolder(root=dataroot,
-                                      transform=transforms.Compose([
-                                       transforms.Resize(image_size_hr[1:]),
-                                       transforms.CenterCrop(image_size_hr[1:]),
-                                       transforms.ToTensor(),
-                                       transforms.Normalize((.5,.5,.5), (.5,.5,.5))]))
     dataloader_hr = torch.utils.data.DataLoader(dataset_hr, batch_size=batch_size, num_workers=2)
     
     D_losses, G_losses, cont_loss, show_im = train_loop(criterion, dataloader_hr)

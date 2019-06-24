@@ -27,6 +27,10 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
   - 17/06
     - Présentation du modèle de super résolution d'Emmanuel (qui se base sur AmbientGAN)
     - Implémentation du modèle en partant de notre code du SRGAN
+    - Début d'implémentations de SRGAN et du modèle d'Emmanuel sur le framework d'Emmanuel
+  
+  - 24/06
+    - Téléchargement et entraînement sur la base de données flickr8k
     - Implémentations de SRGAN et du modèle d'Emmanuel sur le framework d'Emmanuel
   
 ## todo
