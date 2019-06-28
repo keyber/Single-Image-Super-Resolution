@@ -31,7 +31,11 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
   
   - 24/06
     - Téléchargement et entraînement sur la base de données flickr8k
-    - Implémentations de SRGAN et du modèle d'Emmanuel sur le framework d'Emmanuel
+    - Implémentation de SRGAN sur le framework d'Emmanuel
+    - Tentatives (infructueuses) d'entraînement du réseau en x16:
+      - La loss D est toujours très faible
+      - La loss G augmente parfois énormément puis stagne pendant une centaine d'itérations puis redescent
+    - Lecture d'articles et tutos sur les améliorations que l'on peut d'implémenter sur notre réseau 
   
 ## todo
   - améliorations potentielles pour l'implémentation de SRGAN (résultats déjà excellents)
