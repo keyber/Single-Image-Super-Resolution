@@ -44,19 +44,14 @@ def save_and_show(D_losses, G_losses, cont_losses, show_im):
     if print_process is not None:
         print_process.terminate()
     
-    if plot_training:
-        ani_ = _plot(D_losses, G_losses, cont_losses, show_im)
-        write_path_ = _save()
-        _save_anim(ani_, write_path_)
-    else:
-        # sauvegarde le réseau
-        write_path_ = _save()
-        
-        # attend que l'utilisateur soit là pour créer des figures
-        input("appuyer sur une touche pour afficher")
-        
-        ani_ = _plot(D_losses, G_losses, cont_losses, show_im)
-        _save_anim(ani_, write_path_)
+    # sauvegarde le réseau
+    write_path_ = _save()
+    
+    # attend que l'utilisateur soit là pour créer des figures
+    input("appuyer sur une touche pour afficher")
+    
+    _plot(D_losses, G_losses, cont_losses, show_im)
+    _anim(show_im, write_path_)
 
 
 def _save():
@@ -94,14 +89,6 @@ def _plot(D_losses, G_losses, cont_losses, show_im):
     plt.ylabel("Loss")
     plt.legend()
     
-    fig = plt.figure(figsize=(8, 8))
-    plt.axis("off")
-    # np.transpose inverse les axes pour remettre le channel des couleurs en dernier
-    ims = [[plt.imshow(np.transpose(i[0], (1, 2, 0)), animated=True)] for i in img_list]
-    
-    # il faut stocker l'animation dans une variable sinon l'animation plante
-    ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
-    
     plt.figure(figsize=(15, 8))
     # Plot the LR images
     plt.subplot(2, 2, 1)
@@ -129,9 +116,21 @@ def _plot(D_losses, G_losses, cont_losses, show_im):
     plt.title("USR Images")
     plt.imshow(np.transpose(img_list[-1][1], (1, 2, 0)))
     plt.show()
-    return ani
 
 
-def _save_anim(ani, write_path):
+def _anim(show_im, write_path):
+    _, _, img_list = show_im
+    fig = plt.figure(figsize=(8, 8))
+    plt.axis("off")
+    # np.transpose inverse les axes pour remettre le channel des couleurs en dernier
+    ims = [[plt.imshow(np.transpose(i[0], (1, 2, 0)), animated=True)] for i in img_list]
+    
+    # il faut stocker l'animation dans une variable sinon l'animation plante
+    ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
+    
+    if write_path is None:
+        return
     writer = animation.writers['ffmpeg'](fps=1, bitrate=1800)
     ani.save(write_path + "_ani.mp4", writer=writer)
+    
+    plt.show()

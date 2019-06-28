@@ -94,6 +94,9 @@ def train_loop(criterion, dataloader_hr):
             D_losses.append(errD.item())
             cont_losses.append(errG_cont.item())
             i_tot += 1
+
+        schedulerD.step()
+        schedulerG.step()
     
     print("train loop in", time() - t)
     return D_losses, G_losses, cont_losses, (test_lr, test_hr, img_list)
@@ -147,7 +150,6 @@ def content_loss_g(content_extractor, real, fake):
     a = content_extractor(real)
     b = content_extractor(fake)
     return torch.mean(torch.pow(a - b, 2))
-
 
 
 if __name__ == '__main__':
