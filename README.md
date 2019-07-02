@@ -37,6 +37,18 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
       - La loss G augmente parfois énormément puis stagne pendant une centaine d'itérations puis redescent
     - Lecture d'articles et tutos sur les améliorations que l'on peut d'implémenter sur notre réseau 
   
+  - 01/07
+    - Améliorations pour entraînement x16:
+      - Initialisation de G en utilisant seulement une MSE pendant une epoch,
+        puis entraînement du discriminateur uniquement (moins d'une epoch pour éviter le sur-apprentissage)
+      - real_label = .9 (au lieu de 1) pour que D ne soit pas sûr de lui
+      - Sauvegarde des anciennes images générées pour réentrainer D dessus
+      - Normalisation des gradients à 1
+    - En partant d'un mếme réseau, deux entraînement donnent des images complètement différentes,
+      on peut mettre torch.backends.cudnn.deterministic = True et torch.backends.cudnn.benchmark = False
+    - todo: en calculant lr en interpolant hr, on dépasse un peu de [-1, 1]
+  
+  
 ## todo
   - améliorations potentielles pour l'implémentation de SRGAN (résultats déjà excellents)
     - poids de la content loss

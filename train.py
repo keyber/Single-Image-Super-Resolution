@@ -7,25 +7,23 @@ import utils
 from config import *
 
 
+
 def main():
-    # Initialize BCELoss function  #binary cross entropy
-    criterion = torch.nn.BCELoss()
-    
-    dataloader_hr = torch.utils.data.DataLoader(dataset_hr, batch_size=batch_size, num_workers=2)
-    
-    D_losses, G_losses, cont_loss, show_im = train_loop(criterion, dataloader_hr)
+    D_losses, G_losses, cont_loss, show_im = train_loop()
 
     # Affichage des résultats
     utils.save_and_show(D_losses, G_losses, cont_loss, show_im)
 
 
-def train_loop(criterion, dataloader_hr):
-    # Lists to keep track of progress
+def train_loop():
+    # ensemble d'anciennes images générées par G
+    list_fakes = []
+    
+    # lists to keep track of progress
     img_list = []
     G_losses = []
     D_losses = []
     cont_losses = []
-    i_tot = 0
     
     _zero = torch.zeros(1).to(device)
     print_period = max(1, (n_batch if n_batch!=-1 else len(dataloader_hr))//10)
@@ -36,7 +34,7 @@ def train_loop(criterion, dataloader_hr):
     for epoch in range(num_epochs):
         for i, (img_hr, _) in enumerate(dataloader_hr):
             img_hr = img_hr.to(device)
-            img_lr = torch.nn.functional.interpolate(img_hr, scale_factor=1/4 if scale_twice else 1/2,mode='bicubic', align_corners=False)
+            img_lr = torch.nn.functional.interpolate(img_hr, image_size_lr[1:],mode='bicubic', align_corners=False)
             
             if i == n_batch or i == len(dataloader_hr)-1:
                 test_lr, test_hr = img_lr, img_hr
@@ -48,30 +46,35 @@ def train_loop(criterion, dataloader_hr):
             # Generate fake image batch with G
             fake = net_g(img_lr)
             
-            lw_adv_d = loss_weight_adv_d(i_tot)
+            lw_adv_d = loss_weight_adv_d(epoch)
             if lw_adv_d:
                 # Update the Discriminator with adversarial loss
                 net_d.zero_grad()
-                D_G_z1, D_x, errD = lw_adv_d * adversarial_loss_d(criterion, real, fake)
+                D_G_z1, D_x, errD = lw_adv_d * adversarial_loss_d(real, fake, list_fakes)
+                errD /= errD.item()
+                errD.backward()
                 optimizerD.step()
             else:
                 D_G_z1, D_x, errD  = 0, 0, _zero
+
+            if i%10 == 0:
+                list_fakes.append(fake)
             
             # Update the Generator
             net_g.zero_grad()
 
             # adversarial loss
-            lw_adv_g = loss_weight_adv_g(i_tot)
+            lw_adv_g = loss_weight_adv_g(epoch)
             if lw_adv_g:
-                D_G_z2, errG_adv = lw_adv_g * adversarial_loss_g(criterion, fake)
+                D_G_z2, errG_adv = lw_adv_g * adversarial_loss_g(fake)
             else:
                 D_G_z2, errG_adv = 0, _zero
             
             # content loss
-            lw_cont, content_extractor = loss_weight_cont(i_tot)
+            lw_cont, content_extractor = loss_weight_cont(epoch)
             if lw_cont and content_extractor is not None :
                 if content_loss_on_lr:
-                    fake_bruitee = torch.nn.functional.interpolate(fake, scale_factor=1/4 if scale_twice else 1/2,mode='bicubic', align_corners=False)
+                    fake_bruitee = torch.nn.functional.interpolate(fake, image_size_lr[1:],mode='bicubic', align_corners=False)
                     err = content_loss_g(content_extractor, img_lr, fake_bruitee)
                 else:
                     err = content_loss_g(content_extractor, real, fake)
@@ -80,8 +83,10 @@ def train_loop(criterion, dataloader_hr):
                 errG_cont = _zero
             
             errG = errG_adv + errG_cont
-            errG.backward()
-            optimizerG.step()
+            if errG != 0:
+                errG /= errG.item()
+                errG.backward()
+                optimizerG.step()
             
             # Output training stats
             if i % print_period == 0:
@@ -93,54 +98,59 @@ def train_loop(criterion, dataloader_hr):
             G_losses.append(errG_adv.item())
             D_losses.append(errD.item())
             cont_losses.append(errG_cont.item())
-            i_tot += 1
 
-        schedulerD.step()
-        schedulerG.step()
+            schedulerD.step()
+            schedulerG.step()
     
     print("train loop in", time() - t)
     return D_losses, G_losses, cont_losses, (test_lr, test_hr, img_list)
 
 
-def adversarial_loss_d(criterion, real, fake):
+def adversarial_loss_d(real, curr_fake, old_fakes):
     """Update D network: maximize log(D(x)) + log(1 - D(G(z)))"""
     ### Train with all-real batch
     # Forward pass real batch through D
     d_real = net_d(real).view(-1)
     
     # Calculate loss on all-real batch
-    label = torch.full((fake.size(0),), real_label, device=device)
-    errD_real = criterion(d_real, label)
+    errD_real = criterion(d_real, real_label)
     
     # Calculate gradients for D in backward pass
-    errD_real.backward()
+    # errD_real.backward()
     D_x = d_real.mean().item()
     
-    ## Train with all-fake batch
-    # Classify all fake batch with D
-    d_fake = net_d(fake.detach()).view(-1)
+    errD = errD_real
+    D_G_z1 = torch.zeros(1)
     
-    # Calculate D's loss on the all-fake batch
-    label.fill_(fake_label)
-    errD_fake = criterion(d_fake, label)
+    list_fakes = [curr_fake]
+    if len(old_fakes):
+        list_fakes.append(old_fakes[random.randint(0, len(old_fakes)-1)])
     
-    # Calculate the gradients for this batch
-    errD_fake.backward()
-    D_G_z1 = d_fake.mean().item()
+    for fake in list_fakes:
+        ## Train with all-fake batch
+        # Classify all fake batch with D
+        d_fake = net_d(fake.detach()).view(-1)
+        
+        # Calculate D's loss on the all-fake batch
+        errD_fake = criterion(d_fake, fake_label)
+        
+        # Calculate the gradients for this batch
+        # errD_fake.backward()
+        D_G_z1 += d_fake.mean().item()
+        
+        # Add the gradients from the all-real and all-fake batches
+        errD += errD_fake
     
-    # Add the gradients from the all-real and all-fake batches
-    errD = errD_real + errD_fake
     return D_G_z1, D_x, errD
 
 
-def adversarial_loss_g(criterion, fake):
+def adversarial_loss_g(fake):
     """Update G network: maximize log(D(G(z)))"""
     # Since we just updated D, perform another forward pass of all-fake batch through D
     output = net_d(fake).view(-1)
     
     # Calculate G's loss based on this output
-    label = torch.full((fake.size(0),), real_label, device=device) # fake labels are real for generator cost
-    errG = criterion(output, label)
+    errG = criterion(output, real_label)
     
     # Calculate gradients for G
     D_G_z2 = output.mean().item()
