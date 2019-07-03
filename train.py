@@ -2,6 +2,7 @@ import torch.utils.data
 import torch.nn
 import torch.nn.functional
 
+import numpy as np
 from time import time
 import utils
 from config import *
@@ -50,14 +51,16 @@ def train_loop():
                 # Update the Discriminator with adversarial loss
                 net_d.zero_grad()
                 D_G_z1, D_x, errD = lw_adv_d * adversarial_loss_d(real, fake, list_fakes)
-                errD /= errD.item()
-                errD.backward()
+                (errD / errD.item()).backward()
                 optimizerD.step()
             else:
                 D_G_z1, D_x, errD  = 0, 0, _zero
 
             if i%10 == 0:
-                list_fakes.append(fake)
+                if len(list_fakes)==100:
+                    list_fakes[random.randint(0,99)] = fake
+                else:
+                    list_fakes.append(fake)
             
             # Update the Generator
             net_g.zero_grad()
@@ -83,8 +86,7 @@ def train_loop():
             
             errG = errG_adv + errG_cont
             if errG != 0:
-                errG /= errG.item()
-                errG.backward()
+                (errG / errG.item()).backward()
                 optimizerG.step()
             
             # Output training stats
@@ -122,8 +124,7 @@ def adversarial_loss_d(real, curr_fake, old_fakes):
     D_G_z1 = torch.zeros(1)
     
     list_fakes = [curr_fake]
-    if len(old_fakes):
-        list_fakes.append(old_fakes[random.randint(0, len(old_fakes)-1)])
+    list_fakes += np.random.choice(old_fakes, len(old_fakes)//10, replace=False)
     
     for fake in list_fakes:
         ## Train with all-fake batch
