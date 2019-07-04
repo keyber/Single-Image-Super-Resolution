@@ -128,7 +128,7 @@ def _anim(show_im, write_path):
     # il faut stocker l'animation dans une variable sinon l'animation plante
     ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
     
-    writer = animation.writers['ffmpeg'](fps=1, bitrate=1800)
+    writer = animation.writers['ffmpeg'](fps=10, bitrate=1800)
     
     if write_path is not None:
         ani.save(write_path + "_ani.mp4", writer=writer)

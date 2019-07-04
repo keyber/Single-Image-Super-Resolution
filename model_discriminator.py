@@ -1,6 +1,5 @@
 import torch.nn as nn
 
-
 class BasicBlock(nn.Module):
     """Block NON RESIDUEL utilisé par D"""
     def __init__(self, n_in, n_out, stride):

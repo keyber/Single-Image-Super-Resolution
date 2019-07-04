@@ -26,7 +26,7 @@ def train_loop():
     cont_losses = []
     
     _zero = torch.zeros(1).to(device)
-    print_period = max(1, (n_batch if n_batch!=-1 else len(dataloader_hr))//10)
+    print_period = max(1, n_batch//10)
     t = time()
     test_lr, test_hr = None, None
     
@@ -36,7 +36,7 @@ def train_loop():
             img_hr = img_hr.to(device)
             img_lr = lr_from_hr(img_hr)
             
-            if i == n_batch or i == len(dataloader_hr)-1:
+            if i == n_batch or i == len(dataloader_hr) - 1:
                 test_lr, test_hr = img_lr, img_hr
                 utils.save_curr_vis(img_list, test_lr, test_hr, net_g, G_losses, D_losses, cont_losses)
                 break
@@ -50,8 +50,12 @@ def train_loop():
             if lw_adv_d:
                 # Update the Discriminator with adversarial loss
                 net_d.zero_grad()
-                D_G_z1, D_x, errD = lw_adv_d * adversarial_loss_d(real, fake, list_fakes)
-                (errD / errD.item()).backward()
+                D_G_z1, D_x, errD = adversarial_loss_d(real, fake, list_fakes)
+                
+                if normalized_gradient:
+                    (errD * lw_adv_d / errD.item()).backward()
+                else:
+                    (errD * lw_adv_d).backward()
                 optimizerD.step()
             else:
                 D_G_z1, D_x, errD  = 0, 0, _zero
@@ -68,7 +72,7 @@ def train_loop():
             # adversarial loss
             lw_adv_g = loss_weight_adv_g(epoch)
             if lw_adv_g:
-                D_G_z2, errG_adv = lw_adv_g * adversarial_loss_g(fake)
+                D_G_z2, errG_adv = adversarial_loss_g(fake)
             else:
                 D_G_z2, errG_adv = 0, _zero
             
@@ -80,13 +84,16 @@ def train_loop():
                     err = content_loss_g(content_extractor, img_lr, fake_bruitee)
                 else:
                     err = content_loss_g(content_extractor, real, fake)
-                errG_cont = lw_cont * err
+                errG_cont = err
             else:
                 errG_cont = _zero
             
             errG = errG_adv + errG_cont
-            if errG != 0:
-                (errG / errG.item()).backward()
+            if lw_adv_g or lw_cont:
+                if normalized_gradient:
+                    ((errG_adv * lw_adv_g + errG_cont * lw_cont) / errG.item()).backward()
+                else:
+                    (errG_adv * lw_adv_g + errG_cont * lw_cont).backward()
                 optimizerG.step()
             
             # Output training stats
@@ -114,7 +121,7 @@ def adversarial_loss_d(real, curr_fake, old_fakes):
     d_real = net_d(real).view(-1)
     
     # Calculate loss on all-real batch
-    errD_real = criterion(d_real, real_label)
+    errD_real = criterion(d_real, real_label_reduced)
     
     # Calculate gradients for D in backward pass
     # errD_real.backward()
@@ -124,7 +131,7 @@ def adversarial_loss_d(real, curr_fake, old_fakes):
     D_G_z1 = torch.zeros(1)
     
     list_fakes = [curr_fake]
-    list_fakes += np.random.choice(old_fakes, len(old_fakes)//10, replace=False)
+    list_fakes += list(np.random.choice(old_fakes, len(old_fakes)//10, replace=False))
     
     for fake in list_fakes:
         ## Train with all-fake batch

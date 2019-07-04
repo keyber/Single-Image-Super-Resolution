@@ -6,187 +6,241 @@ import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import torchvision.transforms.functional
 
+from model_generator_progressive import GeneratorProgresiveBase, GeneratorSuffix
 from model_generator import Generator
 from model_discriminator import Discriminator
 import model_content_extractor
 
-
 # commande à utiliser pour lancer le script en restreignant les GPU visibles
 #CUDA_VISIBLE_DEVICES=1,2 python3 train.py
 
-# Set random seem for reproducibility
-# seed = 999
-seed = random.randint(1, 10000)
-print("Random Seed: ", seed)
-random.seed(seed)
-torch.manual_seed(seed)
-
-# dataset to use & root directory
-dataset_name, dataroot = "celeba", "/local/beroukhim/data/celeba"
-# dataset_name, dataroot = "flickr", "/local/beroukhim/data/flickr/images"
-# dataset_name, dataroot = "mnist" , "/local/beroukhim/data/mnist"
+progressive = 2
 
 # augmente deux fois la résolution en retournant G(G(x))
 forward_twice = 0
 
 # false: x4 pixels   -  true: x16
-scale_twice = 3
-print("forward_twice", forward_twice, "scale_twice", scale_twice)
+scale_twice = 0
+print("forward_twice", forward_twice, "scale_twice", scale_twice, "progressive", progressive)
 
 # content loss sur les images basse résolution comme dans AmbientGAN
 content_loss_on_lr = False
 
 # Number of GPUs available. Use 0 for CPU mode.
-ngpu = 1
+ngpu = torch.cuda.device_count()
+print("nb gpu", ngpu)
 
 #root directory for trained models
 write_root = "/local/beroukhim/srgan_trained/"
+print("écriture dans", write_root)
 
+# dataset to use and root directory
+dataset_name, dataroot = "celeba", "/local/beroukhim/data/celeba"
+# dataset_name, dataroot = "flickr", "/local/beroukhim/data/flickr/images"
+# dataset_name, dataroot = "mnist" , "/local/beroukhim/data/mnist"
 
-if dataset_name=='celeba':
-    # Spatial size of training images. All images will be resized to this size using a transformer.
-    image_size_hr = (3, 128, 128)
-    if scale_twice or forward_twice:
-        image_size_lr = (3, 32, 32)
-    else:
-        image_size_lr = (3,  64,  64)
-elif dataset_name=='flickr':
-    image_size_hr = (3, 128, 128)
-    if scale_twice or forward_twice:
-        image_size_lr = (3, 32, 32)
-    else:
-        image_size_lr = (3,  64,  64)
-elif dataset_name=='mnist':
-    image_size_hr = (1, 28, 28)
-    if scale_twice or forward_twice:
-        image_size_lr = (1, 7, 7) # visuellement difficile
-    else:
-        image_size_lr = (1, 14, 14)
-else:
-    raise FileNotFoundError
+# affiche les reconstructions à la fin de chaque epoch
+plot_training = True # fait planter si n'arrive pas à afficher
+if plot_training:
+    print("PLOT TRAINING FERA PLANTER LE CODE SI LE SERVEUR X EST INNACCESSIBLE")
 
-plot_training = True
+plot_first = True  # pas encore implémenté
 
 # Learning rate for optimizers
 lr = 1e-4
 
+# normalise losses before backward
+normalized_gradient = False
+
 # Batch size during training
 batch_size = 16
-n_batch = 1000
+n_batch = 100
 
 # Number of training epochs
-num_epochs = 5
+num_epochs = 3
 
+# noinspection PyShadowingNames
+def gen_modules():
+    # Create the generator and discriminator
+    if progressive:
+        net_g = GeneratorProgresiveBase(n_blocks=16, n_features=64)
+        net_g = GeneratorSuffix(net_g, n_features=64)
+    else:
+        net_g = Generator(n_blocks=16, n_features=64, forward_twice=forward_twice, scale_twice=scale_twice, input_channels=image_size_lr[0])
+    
+    net_d = Discriminator(image_size_hr, list_n_features=[64, 64, 128, 128, 256, 256, 512, 512],
+                           list_stride=[1, 2, 1, 2, 1, 2, 1, 2])
+    
+    # Beta1 hyperparam for Adam optimizers
+    beta1 = 0.9
+    
+    # Setup Adam optimizers for both G and D
+    optimizerD = optim.Adam(net_d.parameters(), lr=lr, betas=(beta1, 0.999))
+    if progressive <= 1:
+        optimizerG = optim.Adam(net_g.parameters(), lr=lr, betas=(beta1, 0.999))
+    
+    try:
+        path = input("entrer le chemin de sauvegarde du réseau à charger:\n")
+        checkpoint = torch.load(path)
+        net_g.load_state_dict(checkpoint['net_g'])
+        net_d.load_state_dict(checkpoint['net_d'])
+        if progressive <= 1:
+            optimizerG.load_state_dict(checkpoint['opti_g'])
+        optimizerD.load_state_dict(checkpoint['opti_d'])
+        print("lecture réussie")
+    except Exception as e:
+        print("lecture échouée", e)
+    
+    if progressive == 2:
+        net_g = GeneratorSuffix(net_g.beginning, n_features=16)
+        optimizerG = optim.Adam(net_g.parameters(), lr=lr, betas=(beta1, 0.999))
+    
+    # create a feature extractor
+    identity = model_content_extractor.identity()
+    if image_size_lr[0] == 1:
+        net_content_extractor = identity
+    else:
+        net_content_extractor = model_content_extractor.MaskedVGG(0b01111)
+    
+    # Initialize BCELoss function  #binary cross entropy
+    criterion = torch.nn.BCELoss()
+    
+    return net_g, net_d, identity, net_content_extractor, criterion, optimizerG, optimizerD
 
-# We can use an image folder dataset the way we have it setup.
-# Create the datasets and the dataloaders
-if dataset_name == 'celeba':
-    dataset_hr = dset.ImageFolder(root=dataroot,
-                                  transform=transforms.Compose([
-                                   transforms.Resize(image_size_hr[1:]),
-                                   transforms.ToTensor(),
-                                   transforms.Normalize((.5,.5,.5), (.5,.5,.5))]))
-elif dataset_name == 'flickr':
-    dataset_hr = dset.ImageFolder(root=dataroot,
-                                  transform=transforms.Compose([
-                                   transforms.CenterCrop((image_size_hr[1]*2,image_size_hr[2]*2)),
-                                   transforms.Resize(image_size_hr[1:]),
-                                   transforms.ToTensor(),
-                                   transforms.Normalize((.5,.5,.5), (.5,.5,.5))]))
-elif dataset_name=='mnist':
-    dataset_hr = torchvision.datasets.MNIST(dataroot, train=True, download=True,
-                                   transform=torchvision.transforms.Compose([
-                                       transforms.Resize(image_size_hr[1:]),
-                                       torchvision.transforms.ToTensor(),
-                                       torchvision.transforms.Normalize((0.5,), (0.5,)),
-                                       #torchvision.transforms.Normalize((0.1307,), (0.3081,)), #mean std
-                                   ]))
-else:
-    raise FileNotFoundError
+# noinspection PyShadowingNames
+def gen_losses(net_content_extractor, identity):
+    n = num_epochs
+    n_g = 0, n
+    n_d = 0, n
+    n_content = n, n
+    n_identity = 0, 0
 
-dataloader_hr = torch.utils.data.DataLoader(dataset_hr, batch_size=batch_size, num_workers=2, drop_last=True)
+    # noinspection PyShadowingNames
+    def loss_weight_adv_g(i):
+        return n_g[0] <= i < n_g[1]
 
+    # noinspection PyShadowingNames
+    def loss_weight_adv_d(i):
+        return n_d[0] <= i < n_d[1]
+
+    # noinspection PyShadowingNames
+    def loss_weight_cont(i):
+        cont = n_content[0] <= i < n_content[1]
+        iden = n_identity[0] <= i < n_identity[1]
+        assert not cont or not iden
+        
+        if cont:
+            return 1, net_content_extractor
+        
+        if iden:
+            return 1, identity
+        
+        return 0, None
+    
+    return loss_weight_adv_g, loss_weight_adv_d, loss_weight_cont
+
+# noinspection PyShadowingNames,PyTypeChecker
+def gen_scheduler(optimizerG, optimizerD):
+    ratio_lr = .1  # ratio des lr entre iter_0 et max_iter
+    # f ^ max_iter = ratio_lr   =>   f = ratio_lr ^ 1/max_iter
+    f = ratio_lr ** (1 / (n_batch * num_epochs))
+    schedulerG = torch.optim.lr_scheduler.LambdaLR(optimizerG, lr_lambda=lambda iteration: f ** iteration)
+    schedulerD = torch.optim.lr_scheduler.LambdaLR(optimizerD, lr_lambda=lambda iteration: f ** iteration)
+    return schedulerG, schedulerD
+
+# noinspection PyShadowingNames
+def gen_label(device):
+    # Establish convention for real and fake labels during training
+    real_label = torch.full((batch_size,), 1.0, device=device)
+    real_label_reduced = torch.full((batch_size,), .9, device=device)
+    fake_label = torch.full((batch_size,), .0, device=device)
+    return real_label, real_label_reduced, fake_label
+
+def gen_seed():
+    # Set random seem for reproducibility
+    # seed = 999
+    seed = random.randint(1, 10000)
+    print("Random Seed: ", seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+
+# noinspection PyShadowingNames
+def gen_dataset():
+    if dataset_name == 'celeba':
+        # Spatial size of training images. All images will be resized to this size using a transformer.
+        image_size_hr = (3, 128, 128)
+        if scale_twice or forward_twice or progressive==2:
+            image_size_lr = (3, 32, 32)
+        else:
+            image_size_lr = (3, 64, 64)
+    elif dataset_name == 'flickr':
+        image_size_hr = (3, 128, 128)
+        if scale_twice or forward_twice or progressive==2:
+            image_size_lr = (3, 32, 32)
+        else:
+            image_size_lr = (3, 64, 64)
+    elif dataset_name == 'mnist':
+        image_size_hr = (1, 28, 28)
+        if scale_twice or forward_twice or progressive==2:
+            image_size_lr = (1, 7, 7)  # visuellement difficile
+        else:
+            image_size_lr = (1, 14, 14)
+    else:
+        raise FileNotFoundError
+
+    # We can use an image folder dataset the way we have it setup.
+    # Create the datasets and the dataloaders
+    if dataset_name == 'celeba':
+        dataset_hr = dset.ImageFolder(root=dataroot,
+                                      transform=transforms.Compose([
+                                          transforms.Resize(image_size_hr[1:]),
+                                          transforms.ToTensor(),
+                                          transforms.Normalize((.5, .5, .5), (.5, .5, .5))]))
+    elif dataset_name == 'flickr':
+        dataset_hr = dset.ImageFolder(root=dataroot,
+                                      transform=transforms.Compose([
+                                          transforms.CenterCrop((image_size_hr[1] * 2, image_size_hr[2] * 2)),
+                                          transforms.Resize(image_size_hr[1:]),
+                                          transforms.ToTensor(),
+                                          transforms.Normalize((.5, .5, .5), (.5, .5, .5))]))
+    elif dataset_name == 'mnist':
+        dataset_hr = torchvision.datasets.MNIST(dataroot, train=True, download=True,
+                                                transform=torchvision.transforms.Compose([
+                                                    transforms.Resize(image_size_hr[1:]),
+                                                    torchvision.transforms.ToTensor(),
+                                                    torchvision.transforms.Normalize((0.5,), (0.5,)),
+                                                    #torchvision.transforms.Normalize((0.1307,), (0.3081,)), #mean std
+                                                ]))
+    else:
+        raise FileNotFoundError
+
+    dataloader_hr = torch.utils.data.DataLoader(dataset_hr, batch_size=batch_size, num_workers=2, drop_last=True)
+    return image_size_lr, image_size_hr, dataloader_hr
+
+# noinspection PyShadowingNames
+def gen_device(net_g, net_d, net_content_extractor):
+    # Decide which device we want to run on
+    device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
+    net_g = net_g.to(device)
+    net_d = net_d.to(device)
+    if net_content_extractor is not None:
+        net_content_extractor = net_content_extractor.to(device)
+    
+    if (device.type == 'cuda') and (ngpu > 1):
+        net_g = nn.DataParallel(net_g, list(range(ngpu)))
+        net_d = nn.DataParallel(net_d, list(range(ngpu)))
+        if net_content_extractor is not None:
+            net_content_extractor = nn.DataParallel(net_content_extractor, list(range(ngpu)))
+
+    print(next(net_g.parameters()).is_cuda)
+    return device, net_g, net_d, net_content_extractor
+
+gen_seed()
+image_size_lr, image_size_hr, dataloader_hr = gen_dataset()
 if n_batch == -1:
     n_batch = len(dataloader_hr)
-
-# Create the generator and discriminator
-net_g = Generator(n_blocks=16, n_features=64, forward_twice=forward_twice, scale_twice=scale_twice, input_channels=image_size_lr[0])
-net_d = Discriminator(image_size_hr, list_n_features=[64, 64, 128, 128, 256, 256, 512, 512], list_stride=[1, 2, 1, 2, 1, 2, 1, 2])
-
-# create a feature extractor
-identity = model_content_extractor.identity()
-if image_size_lr[0]==1:
-    net_content_extractor = identity
-else:
-    net_content_extractor = model_content_extractor.MaskedVGG(0b01111)
-
-# Initialize BCELoss function  #binary cross entropy
-criterion = torch.nn.BCELoss()
-
-n = num_epochs
-n_g        = 0, n
-n_d        = 0, n
-n_content  = n, n
-n_identity = 0, n
-n_none     = n, n
-
-def loss_weight_adv_g(i):
-    return n_g[0] <= i < n_g[1]
-
-def loss_weight_adv_d(i):
-    return n_d[0] <= i < n_d[1]
-
-def loss_weight_cont(i):
-    cont = n_content[0] <= i < n_content[1]
-    iden = n_identity[0] <= i < n_identity[1]
-    assert not cont or not iden
-    
-    if cont:
-        return 1, net_content_extractor
-    
-    if iden:
-        return 1, identity
-    
-    return 0, None
-
-# Beta1 hyperparam for Adam optimizers
-beta1 = 0.9
-
-# Decide which device we want to run on
-device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
-net_g = net_g.to(device)
-net_d = net_d.to(device)
-if net_content_extractor is not None:
-    net_content_extractor = net_content_extractor.to(device)
-
-# Setup Adam optimizers for both G and D
-optimizerG = optim.Adam(net_g.parameters(), lr=lr, betas=(beta1, 0.999))
-optimizerD = optim.Adam(net_d.parameters(), lr=lr, betas=(beta1, 0.999))
-
-ratio_lr = .1 # ratio des lr entre iter_0 et max_iter
-# f ^ max_iter = ratio_lr   =>   f = ratio_lr ^ 1/max_iter
-f = ratio_lr ** (1 / (n_batch*num_epochs))
-schedulerG = torch.optim.lr_scheduler.LambdaLR(optimizerG, lr_lambda=lambda iteration: f**iteration)
-schedulerD = torch.optim.lr_scheduler.LambdaLR(optimizerD, lr_lambda=lambda iteration: f**iteration)
-
-try:
-    path = input("entrer le chemin de sauvegarde du réseau à charger:\n")
-    checkpoint = torch.load(path)
-    net_g.load_state_dict(checkpoint['net_g'])
-    net_d.load_state_dict(checkpoint['net_d'])
-    optimizerG.load_state_dict(checkpoint['opti_g'])
-    optimizerD.load_state_dict(checkpoint['opti_d'])
-    print("lecture réussie")
-except Exception as e:
-    print("lecture échouée", e)
-
-if (device.type == 'cuda') and (ngpu > 1):
-    net_g = nn.DataParallel(net_g, list(range(ngpu)))
-    net_d = nn.DataParallel(net_d, list(range(ngpu)))
-    if net_content_extractor is not None:
-        net_content_extractor = nn.DataParallel(net_content_extractor, list(range(ngpu)))
-
-
-# Establish convention for real and fake labels during training
-real_label = torch.full((batch_size,), .9, device=device)
-fake_label = torch.full((batch_size,), .0, device=device)
+net_g, net_d, identity, net_content_extractor, criterion, optimizerG, optimizerD = gen_modules()
+device, net_g, net_d, net_content_extractor = gen_device(net_g, net_d, net_content_extractor)
+loss_weight_adv_g, loss_weight_adv_d, loss_weight_cont = gen_losses(net_content_extractor, identity)
+schedulerG, schedulerD = gen_scheduler(optimizerG, optimizerD)
+real_label, real_label_reduced, fake_label = gen_label(device)

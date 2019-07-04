@@ -73,6 +73,7 @@ def get_size(im, mask):
 
 def _test_base():
     m = MaskedVGG(0b00011)
+    print(m.layers)
     assert len(m.layers)==9
     m = MaskedVGG(0b00010)
     assert len(m.layers)==9
