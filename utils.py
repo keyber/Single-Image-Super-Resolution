@@ -89,7 +89,7 @@ def _plot(D_losses, G_losses, cont_losses, show_im):
     plt.ylabel("Loss")
     plt.legend()
     
-    plt.figure(figsize=(15, 8))
+    plt.figure(figsize=(8, 8))
     # Plot the LR images
     plt.subplot(2, 2, 1)
     plt.axis("off")
