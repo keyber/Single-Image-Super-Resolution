@@ -11,16 +11,17 @@ from model_generator import Generator
 from model_discriminator import Discriminator
 import model_content_extractor
 
+
 # commande à utiliser pour lancer le script en restreignant les GPU visibles
 #CUDA_VISIBLE_DEVICES=1,2 python3 train.py
 
-progressive = 2
+progressive = 0
 
 # augmente deux fois la résolution en retournant G(G(x))
 forward_twice = 0
 
 # false: x4 pixels   -  true: x16
-scale_twice = 0
+scale_twice = 1
 print("forward_twice", forward_twice, "scale_twice", scale_twice, "progressive", progressive)
 
 # content loss sur les images basse résolution comme dans AmbientGAN
@@ -40,9 +41,9 @@ dataset_name, dataroot = "celeba", "/local/beroukhim/data/celeba"
 # dataset_name, dataroot = "mnist" , "/local/beroukhim/data/mnist"
 
 # affiche les reconstructions à la fin de chaque epoch
-plot_training = True # fait planter si n'arrive pas à afficher
+plot_training = False # fait planter si n'arrive pas à afficher
 if plot_training:
-    print("PLOT TRAINING FERA PLANTER LE CODE SI LE SERVEUR X EST INNACCESSIBLE")
+    print("PLOT TRAINING FERA PLANTER LE CODE SI LE SERVEUR X EST INACCESSIBLE")
 
 plot_first = True  # pas encore implémenté
 
@@ -50,11 +51,11 @@ plot_first = True  # pas encore implémenté
 lr = 1e-4
 
 # normalise losses before backward
-normalized_gradient = False
+normalized_gradient = False # plante quand erreur D nulle
 
 # Batch size during training
 batch_size = 16
-n_batch = 100
+n_batch = -1
 
 # Number of training epochs
 num_epochs = 3
@@ -66,34 +67,24 @@ def gen_modules():
         net_g = GeneratorProgresiveBase(n_blocks=16, n_features=64)
         net_g = GeneratorSuffix(net_g, n_features=64)
     else:
-        net_g = Generator(n_blocks=16, n_features=64, forward_twice=forward_twice, scale_twice=scale_twice, input_channels=image_size_lr[0])
+        net_g = Generator(n_blocks=16, n_features_block=64, n_features_last=256, forward_twice=forward_twice, scale_twice=scale_twice, input_channels=image_size_lr[0])
     
     net_d = Discriminator(image_size_hr, list_n_features=[64, 64, 128, 128, 256, 256, 512, 512],
                            list_stride=[1, 2, 1, 2, 1, 2, 1, 2])
-    
-    # Beta1 hyperparam for Adam optimizers
-    beta1 = 0.9
-    
-    # Setup Adam optimizers for both G and D
-    optimizerD = optim.Adam(net_d.parameters(), lr=lr, betas=(beta1, 0.999))
-    if progressive <= 1:
-        optimizerG = optim.Adam(net_g.parameters(), lr=lr, betas=(beta1, 0.999))
     
     try:
         path = input("entrer le chemin de sauvegarde du réseau à charger:\n")
         checkpoint = torch.load(path)
         net_g.load_state_dict(checkpoint['net_g'])
         net_d.load_state_dict(checkpoint['net_d'])
-        if progressive <= 1:
-            optimizerG.load_state_dict(checkpoint['opti_g'])
-        optimizerD.load_state_dict(checkpoint['opti_d'])
         print("lecture réussie")
     except Exception as e:
+        path = None
         print("lecture échouée", e)
     
     if progressive == 2:
+        net_g.beginning[0].requires_grad = False
         net_g = GeneratorSuffix(net_g.beginning, n_features=16)
-        optimizerG = optim.Adam(net_g.parameters(), lr=lr, betas=(beta1, 0.999))
     
     # create a feature extractor
     identity = model_content_extractor.identity()
@@ -105,24 +96,24 @@ def gen_modules():
     # Initialize BCELoss function  #binary cross entropy
     criterion = torch.nn.BCELoss()
     
-    return net_g, net_d, identity, net_content_extractor, criterion, optimizerG, optimizerD
+    return net_g, net_d, identity, net_content_extractor, criterion, path
 
 # noinspection PyShadowingNames
 def gen_losses(net_content_extractor, identity):
     n = num_epochs
     n_g = 0, n
     n_d = 0, n
-    n_content = n, n
+    n_content = 0, n
     n_identity = 0, 0
-
+    
     # noinspection PyShadowingNames
     def loss_weight_adv_g(i):
         return n_g[0] <= i < n_g[1]
-
+    
     # noinspection PyShadowingNames
     def loss_weight_adv_d(i):
         return n_d[0] <= i < n_d[1]
-
+    
     # noinspection PyShadowingNames
     def loss_weight_cont(i):
         cont = n_content[0] <= i < n_content[1]
@@ -232,15 +223,31 @@ def gen_device(net_g, net_d, net_content_extractor):
         if net_content_extractor is not None:
             net_content_extractor = nn.DataParallel(net_content_extractor, list(range(ngpu)))
 
-    print(next(net_g.parameters()).is_cuda)
     return device, net_g, net_d, net_content_extractor
+
+# noinspection PyShadowingNames
+def gen_optimizers(checkpoint_path):
+    optimizerG = optim.Adam(net_g.parameters(), lr=lr, betas=(.9, 0.999))
+    optimizerD = optim.Adam(net_d.parameters(), lr=lr, betas=(.9, 0.999))
+    
+    if checkpoint_path is not None:
+        try:
+            checkpoint = torch.load(checkpoint_path)
+            net_g.load_state_dict(checkpoint['net_g'])
+            net_d.load_state_dict(checkpoint['net_d'])
+        except Exception as e:
+            print("erreur chargement optimizers", e)
+            pass
+        
+    return optimizerG, optimizerD
 
 gen_seed()
 image_size_lr, image_size_hr, dataloader_hr = gen_dataset()
 if n_batch == -1:
     n_batch = len(dataloader_hr)
-net_g, net_d, identity, net_content_extractor, criterion, optimizerG, optimizerD = gen_modules()
+net_g, net_d, identity, net_content_extractor, criterion, checkpoint_path = gen_modules()
 device, net_g, net_d, net_content_extractor = gen_device(net_g, net_d, net_content_extractor)
+optimizerG, optimizerD = gen_optimizers(checkpoint_path)
 loss_weight_adv_g, loss_weight_adv_d, loss_weight_cont = gen_losses(net_content_extractor, identity)
 schedulerG, schedulerD = gen_scheduler(optimizerG, optimizerD)
 real_label, real_label_reduced, fake_label = gen_label(device)
