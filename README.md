@@ -25,7 +25,7 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
       - [Sacred](https://sacred.readthedocs.io/en/latest/index.html) (pour sauvegarder les configs utilisées) 
   
   - 17/06
-    - Présentation du modèle de super résolution d'Emmanuel (qui se base sur AmbientGAN)
+    - Emmanuel nous présente son modèle de super résolution (qui se base sur AmbientGAN)
     - Implémentation du modèle en partant de notre code du SRGAN
     - Début d'implémentations de SRGAN et du modèle d'Emmanuel sur le framework d'Emmanuel
   
@@ -38,15 +38,18 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
     - Lecture d'articles et tutos sur les améliorations que l'on peut d'implémenter sur notre réseau 
   
   - 01/07
+    - La dernière features map de G avant upsampling était de taille 64, elle passe à 256 comme dans l'article de SRGAN
     - Améliorations pour entraînement x16:
       - Initialisation de G en utilisant seulement une MSE pendant une epoch,
         puis entraînement du discriminateur uniquement (moins d'une epoch pour éviter le sur-apprentissage)
       - real_label = .9 (au lieu de 1) pour que D ne soit pas sûr de lui
       - Sauvegarde des anciennes images générées pour réentrainer D dessus
-      - Normalisation des gradients à 1
-    - En partant d'un mếme réseau, deux entraînement donnent des images complètement différentes,
+      - Normalisation des gradients à 1 (c'est en fait mieux sans)
+      - spectralNorm à rajouter
+      - features map pour la content loss extraites avant activation
+    - Le calcul de lr par interpolation de hr, on dépasse un peu de [-1, 1]. On rescale les images dans [-1, 1] si elles dépassent de l'intervalle.
+    - En partant d'un mếme réseau (avec un dataset non mélangé), deux entraînements donnent des images complètement différentes,
       on peut mettre torch.backends.cudnn.deterministic = True et torch.backends.cudnn.benchmark = False
-    - todo: en calculant lr en interpolant hr, on dépasse un peu de [-1, 1]
   
   
 ## todo
