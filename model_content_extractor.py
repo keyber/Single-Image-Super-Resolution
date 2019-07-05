@@ -3,7 +3,8 @@ import torch.nn as nn
 import torch
 
 # indices des couches maxPool dans VGG19 (on n'utilise jamais la dernière)
-maxPoolInd = ( 4,   9,  18,  27,  36)
+maxPool_indexes = (4, 9, 18, 27, 36)
+maxPool_indexes_before_act = [x - 1 for x in maxPool_indexes]
 
 # taille des feature map (pour les tests)
 layersSize = (64, 128, 256, 512, 512) # les deux derniers sont bien à 512
@@ -37,7 +38,7 @@ class MaskedVGG(nn.Module):
         super().__init__()
 
         # on garde toutes les couches demandées
-        self.intermediate_layers_kept = [maxPoolInd[i] for i in range(len(maxPoolInd)) if mask & (1<<i)]
+        self.intermediate_layers_kept = [maxPool_indexes_before_act[i] for i in range(len(maxPool_indexes_before_act)) if mask & (1 << i)]
         
         self.layers = models.vgg19(pretrained=True).features[:self.intermediate_layers_kept[-1]]
         self.layers.eval()
