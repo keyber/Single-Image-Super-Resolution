@@ -1,11 +1,13 @@
 import torch.nn as nn
+from torch.nn.utils import spectral_norm as sn
+
 
 class BasicBlock(nn.Module):
     """Block NON RESIDUEL utilisé par D"""
     def __init__(self, n_in, n_out, stride):
         super().__init__()
         self.layers = nn.Sequential(
-            nn.Conv2d(in_channels=n_in, out_channels=n_out, kernel_size=3, stride=stride, padding=1),
+            sn(nn.Conv2d(in_channels=n_in, out_channels=n_out, kernel_size=3, stride=stride, padding=1)),
             nn.BatchNorm2d(num_features=n_out),
             nn.LeakyReLU())
     
@@ -16,7 +18,6 @@ class BasicBlock(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self, input_shape, list_n_features, list_stride):
         """
-        
         features et strides utilisés dans SRGAN :
             [64, 64, 128, 128, 256, 256, 512, 512],
             [1,   2,   1,   2,   1,   2,   1,   2]"""
@@ -35,7 +36,7 @@ class Discriminator(nn.Module):
         
         self.conv = nn.Sequential(
             # entrée
-            nn.Conv2d(in_channels=input_shape[0], out_channels=list_n_features[0], kernel_size=3, stride=list_stride[0], padding=1),
+            sn(nn.Conv2d(in_channels=input_shape[0], out_channels=list_n_features[0], kernel_size=3, stride=list_stride[0], padding=1)),
             nn.LeakyReLU(),
             
             # liste de blocks

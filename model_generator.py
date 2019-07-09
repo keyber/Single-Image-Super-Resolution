@@ -1,4 +1,5 @@
 import torch.nn as nn
+from torch.nn.utils import spectral_norm as sn
 
 
 class BasicBlock(nn.Module):
@@ -6,10 +7,10 @@ class BasicBlock(nn.Module):
     def __init__(self, n_features):
         super().__init__()
         self.layers = nn.Sequential(
-            nn.Conv2d(in_channels=n_features, out_channels=n_features, kernel_size=3, stride=1, padding=1),
+            sn(nn.Conv2d(in_channels=n_features, out_channels=n_features, kernel_size=3, stride=1, padding=1)),
             nn.BatchNorm2d(num_features=n_features),
             nn.PReLU(),
-            nn.Conv2d(in_channels=n_features, out_channels=n_features, kernel_size=3, stride=1, padding=1),
+            sn(nn.Conv2d(in_channels=n_features, out_channels=n_features, kernel_size=3, stride=1, padding=1)),
             nn.BatchNorm2d(num_features=n_features))
 
     def forward(self, x):
@@ -30,55 +31,55 @@ class Generator(nn.Module):
         self.forward_twice = forward_twice
         
         self.first_layers = nn.Sequential(
-            nn.Conv2d(in_channels=input_channels, out_channels=n_features_block, kernel_size=9, stride=1, padding=4),
+            sn(nn.Conv2d(in_channels=input_channels, out_channels=n_features_block, kernel_size=9, stride=1, padding=4)),
             nn.PReLU())
         
         self.block_list = nn.Sequential(*[BasicBlock(n_features_block) for _ in range(n_blocks)])
         
         self.block_list_end = nn.Sequential(
-            nn.Conv2d(in_channels=n_features_block, out_channels=n_features_block, kernel_size=3, stride=1, padding=1),
+            sn(nn.Conv2d(in_channels=n_features_block, out_channels=n_features_block, kernel_size=3, stride=1, padding=1)),
             nn.BatchNorm2d(num_features=n_features_block),
         )
         
         if not scale_twice:
             self.upscale = nn.Sequential(
                 # upscale1
-                nn.Conv2d(in_channels=n_features_block, out_channels=n_features_last, kernel_size=3, stride=1, padding=1),
+                sn(nn.Conv2d(in_channels=n_features_block, out_channels=n_features_last, kernel_size=3, stride=1, padding=1)),
                 nn.PixelShuffle(upscale_factor=2),
                 nn.PReLU(),
     
                 # sortie
-                nn.Conv2d(in_channels=n_features_last//4, out_channels=input_channels, kernel_size=3, stride=1, padding=1),
+                sn(nn.Conv2d(in_channels=n_features_last//4, out_channels=input_channels, kernel_size=3, stride=1, padding=1)),
                 nn.Tanh())
         elif scale_twice==1:
             self.upscale = nn.Sequential(
                 # upscale1
-                nn.Conv2d(in_channels=n_features_block, out_channels=n_features_last, kernel_size=3, stride=1, padding=1),
+                sn(nn.Conv2d(in_channels=n_features_block, out_channels=n_features_last, kernel_size=3, stride=1, padding=1)),
                 nn.PixelShuffle(upscale_factor=2),
                 nn.PReLU(),
         
                 # upscale2
-                nn.Conv2d(in_channels=n_features_last//4, out_channels=n_features_last, kernel_size=3, stride=1, padding=1),
+                sn(nn.Conv2d(in_channels=n_features_last//4, out_channels=n_features_last, kernel_size=3, stride=1, padding=1)),
                 nn.PixelShuffle(upscale_factor=2),
                 nn.PReLU(),
         
                 # sortie
-                nn.Conv2d(in_channels=n_features_last//4, out_channels=input_channels, kernel_size=3, stride=1, padding=1),
+                sn(nn.Conv2d(in_channels=n_features_last//4, out_channels=input_channels, kernel_size=3, stride=1, padding=1)),
                 nn.Tanh())
         elif scale_twice == 2:
             self.upscale = nn.Sequential(
                 # upscale1
-                nn.Conv2d(in_channels=n_features_block, out_channels=n_features_last, kernel_size=3, stride=1, padding=1),
+                sn(nn.Conv2d(in_channels=n_features_block, out_channels=n_features_last, kernel_size=3, stride=1, padding=1)),
                 nn.PixelShuffle(upscale_factor=4),
                 nn.PReLU(),
     
                 # sortie
-                nn.Conv2d(in_channels=n_features_last//4, out_channels=input_channels, kernel_size=3, stride=1, padding=1),
+                sn(nn.Conv2d(in_channels=n_features_last//4, out_channels=input_channels, kernel_size=3, stride=1, padding=1)),
                 nn.Tanh())
         elif scale_twice == 3:
             self.upscale = nn.Sequential(
                 # upscale1
-                nn.Conv2d(in_channels=n_features_block, out_channels=input_channels*16, kernel_size=3, stride=1, padding=1),
+                sn(nn.Conv2d(in_channels=n_features_block, out_channels=input_channels*16, kernel_size=3, stride=1, padding=1)),
                 nn.PixelShuffle(upscale_factor=4),
                 nn.Tanh())
             
