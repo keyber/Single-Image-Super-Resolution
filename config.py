@@ -27,10 +27,6 @@ print("forward_twice", forward_twice, "scale_twice", scale_twice, "progressive",
 # content loss sur les images basse résolution comme dans AmbientGAN
 content_loss_on_lr = False
 
-# Number of GPUs available. Use 0 for CPU mode.
-ngpu = torch.cuda.device_count()
-print("nb gpu", ngpu)
-
 #root directory for trained models
 write_root = "/local/beroukhim/srgan_trained/"
 print("écriture dans", write_root)
@@ -41,7 +37,7 @@ dataset_name, dataroot = "celeba", "/local/beroukhim/data/celeba"
 # dataset_name, dataroot = "mnist" , "/local/beroukhim/data/mnist"
 
 # affiche les reconstructions à la fin de chaque epoch
-plot_training = False # fait planter si n'arrive pas à afficher
+plot_training = True # fait planter si n'arrive pas à afficher
 if plot_training:
     print("PLOT TRAINING FERA PLANTER LE CODE SI LE SERVEUR X EST INACCESSIBLE")
 
@@ -55,10 +51,10 @@ normalized_gradient = False # plante quand erreur D nulle
 
 # Batch size during training
 batch_size = 16
-n_batch = -1
+n_batch = 100
 
 # Number of training epochs
-num_epochs = 3
+num_epochs = 1
 
 # noinspection PyShadowingNames
 def gen_modules():
@@ -108,11 +104,15 @@ def gen_losses(net_content_extractor, identity):
     
     # noinspection PyShadowingNames
     def loss_weight_adv_g(i):
-        return n_g[0] <= i < n_g[1]
+        if n_g[0] <= i < n_g[1]:
+            return 1e-3
+        return 0
     
     # noinspection PyShadowingNames
     def loss_weight_adv_d(i):
-        return n_d[0] <= i < n_d[1]
+        if n_d[0] <= i < n_d[1]:
+            return 1.0
+        return 0
     
     # noinspection PyShadowingNames
     def loss_weight_cont(i):
@@ -121,10 +121,10 @@ def gen_losses(net_content_extractor, identity):
         assert not cont or not iden
         
         if cont:
-            return 1, net_content_extractor
+            return 1.0, net_content_extractor
         
         if iden:
-            return 1, identity
+            return 10.0, identity
         
         return 0, None
     
@@ -210,6 +210,9 @@ def gen_dataset():
 
 # noinspection PyShadowingNames
 def gen_device(net_g, net_d, net_content_extractor):
+    # Number of GPUs available. Use 0 for CPU mode.
+    ngpu = torch.cuda.device_count()
+    
     # Decide which device we want to run on
     device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
     net_g = net_g.to(device)
@@ -251,3 +254,4 @@ optimizerG, optimizerD = gen_optimizers(checkpoint_path)
 loss_weight_adv_g, loss_weight_adv_d, loss_weight_cont = gen_losses(net_content_extractor, identity)
 schedulerG, schedulerD = gen_scheduler(optimizerG, optimizerD)
 real_label, real_label_reduced, fake_label = gen_label(device)
+

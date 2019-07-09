@@ -32,25 +32,32 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
   - 24/06
     - Téléchargement et entraînement sur la base de données flickr8k
     - Implémentation de SRGAN sur le framework d'Emmanuel
-    - Tentatives (infructueuses) d'entraînement du réseau en x16:
+    - Tentatives (infructueuses) d'entraînement du réseau en x4:
       - La loss D est toujours très faible
       - La loss G augmente parfois énormément puis stagne pendant une centaine d'itérations puis redescent
     - Lecture d'articles et tutos sur les améliorations que l'on peut d'implémenter sur notre réseau 
   
   - 01/07
     - La dernière features map de G avant upsampling était de taille 64, elle passe à 256 comme dans l'article de SRGAN
-    - Améliorations pour entraînement x16:
+    - Améliorations pour entraînement x4:
       - Initialisation de G en utilisant seulement une MSE pendant une epoch,
         puis entraînement du discriminateur uniquement (moins d'une epoch pour éviter le sur-apprentissage)
       - real_label = .9 (au lieu de 1) pour que D ne soit pas sûr de lui
       - Sauvegarde des anciennes images générées pour réentrainer D dessus
       - Normalisation des gradients à 1 (c'est en fait mieux sans)
-      - spectralNorm à rajouter
+      - spectralNorm dans G et D
       - features map pour la content loss extraites avant activation
     - Le calcul de lr par interpolation de hr, on dépasse un peu de [-1, 1]. On rescale les images dans [-1, 1] si elles dépassent de l'intervalle.
     - En partant d'un mếme réseau (avec un dataset non mélangé), deux entraînements donnent des images complètement différentes,
       on peut mettre torch.backends.cudnn.deterministic = True et torch.backends.cudnn.benchmark = False
   
+  - 08/07
+    - Augmentation graduelle du poids de la loss adversaire (par rapport à la content loss) tant que cela améliore le rendu.
+    - Lecture de ESRGAN. Améliorations potentielles :
+      - architecture de G
+      - relativistic D
+      - enlever les BatchNorm
+    
   
 ## todo
   - améliorations potentielles pour l'implémentation de SRGAN (résultats déjà excellents)

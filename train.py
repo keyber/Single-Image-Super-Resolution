@@ -12,7 +12,7 @@ def main():
     D_losses, G_losses, cont_loss, show_im = train_loop()
 
     # Affichage des résultats
-    utils.save_and_show(D_losses, G_losses, cont_loss, show_im)
+    utils.save_and_show(net_g, net_d, optimizerG, optimizerD, D_losses, G_losses, cont_loss, show_im, write_root)
 
 
 def train_loop():
@@ -34,11 +34,11 @@ def train_loop():
     for epoch in range(num_epochs):
         for i, (img_hr, _) in enumerate(dataloader_hr):
             img_hr = img_hr.to(device)
-            img_lr = lr_from_hr(img_hr)
+            img_lr = utils.lr_from_hr(img_hr, image_size_lr[1:], device=device)
             
             if i == n_batch or i == len(dataloader_hr) - 1:
-                test_lr, test_hr = img_lr, img_hr
-                utils.save_curr_vis(img_list, test_lr, test_hr, net_g, G_losses, D_losses, cont_losses)
+                test_lr, test_hr = img_lr.cpu(), img_hr.cpu()
+                utils.save_curr_vis(img_list, img_lr, img_hr, net_g, G_losses, D_losses, cont_losses, plot_training)
                 break
             
             real = img_hr
@@ -85,7 +85,7 @@ def train_loop():
             lw_cont, content_extractor = loss_weight_cont(epoch)
             if lw_cont and content_extractor is not None :
                 if content_loss_on_lr:
-                    fake_bruitee = lr_from_hr(fake)
+                    fake_bruitee = utils.lr_from_hr(fake, image_size_lr[1:], device=device)
                     err = content_loss_g(content_extractor, img_lr, fake_bruitee)
                 else:
                     err = content_loss_g(content_extractor, real, fake)
@@ -173,26 +173,6 @@ def content_loss_g(content_extractor, real, fake):
     a = content_extractor(real)
     b = content_extractor(fake)
     return torch.mean(torch.pow(a - b, 2))
-
-def lr_from_hr(img_hr):
-    img_lr = torch.nn.functional.interpolate(img_hr, image_size_lr[1:], mode='bicubic', align_corners=False)
-    
-    m_in = torch.min(img_lr)
-    M_in = torch.max(img_lr)
-    if m_in < -1 or M_in > 1:
-        #[m_in, M_in]
-        m_out = min((-1, m_in))
-        M_out = max((1, M_in))
-        
-        #[0, M_in - m_in]
-        img_lr -= m_in
-        
-        #[0, M_out - m_out]
-        img_lr *= (M_out - m_out) / (M_in - m_in)
-
-        #[m_out, M_out]
-        img_lr += m_out
-    return img_lr
 
 if __name__ == '__main__':
     main()
