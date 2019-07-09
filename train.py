@@ -51,20 +51,24 @@ def train_loop():
                 # Update the Discriminator with adversarial loss
                 net_d.zero_grad()
                 D_G_z1, D_x, errD = adversarial_loss_d(real, fake, list_fakes)
+                errD *= lw_adv_d
                 
                 if normalized_gradient:
-                    (errD * lw_adv_d / errD.item()).backward()
+                    (errD / errD.item()).backward()
                 else:
-                    (errD * lw_adv_d).backward()
+                    errD.backward()
                 optimizerD.step()
             else:
                 D_G_z1, D_x, errD  = 0, 0, _zero
-
+            
+            # sauvegarde un batch sur 10
             if i%10 == 0:
+                old = fake.detach()
+                # écrase un ancien aléatoirement pour ne pas prendre trop de RAM
                 if len(list_fakes)==100:
-                    list_fakes[random.randint(0,99)] = fake
+                    list_fakes[random.randint(0,99)] = old
                 else:
-                    list_fakes.append(fake)
+                    list_fakes.append(old)
             
             # Update the Generator
             net_g.zero_grad()
@@ -73,6 +77,7 @@ def train_loop():
             lw_adv_g = loss_weight_adv_g(epoch)
             if lw_adv_g:
                 D_G_z2, errG_adv = adversarial_loss_g(fake)
+                errG_adv *= lw_adv_g
             else:
                 D_G_z2, errG_adv = 0, _zero
             
@@ -84,16 +89,17 @@ def train_loop():
                     err = content_loss_g(content_extractor, img_lr, fake_bruitee)
                 else:
                     err = content_loss_g(content_extractor, real, fake)
-                errG_cont = err
+                errG_cont = err * lw_cont
             else:
                 errG_cont = _zero
-            
+
             errG = errG_adv + errG_cont
+            
             if lw_adv_g or lw_cont:
                 if normalized_gradient:
-                    ((errG_adv * lw_adv_g + errG_cont * lw_cont) / errG.item()).backward()
+                    (errG / errG.item()).backward()
                 else:
-                    (errG_adv * lw_adv_g + errG_cont * lw_cont).backward()
+                    errG.backward()
                 optimizerG.step()
             
             # Output training stats
