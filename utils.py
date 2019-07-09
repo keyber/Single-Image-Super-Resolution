@@ -5,14 +5,47 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import torch.nn.functional
 import os
-from config import *
 import multiprocessing
 
 
 print_process = None
 
 
-def save_curr_vis(img_list, img_lr, img_hr, netG, G_losses, D_losses, cont_losses):
+def _subsampling_interpolation(img_hr, image_size_lr):
+    return torch.nn.functional.interpolate(img_hr, image_size_lr, mode='bicubic', align_corners=True)
+
+def _crop_lr(img_lr, device='cpu'):
+    return torch.max(torch.min(img_lr, torch.full((1,), 1.0, device=device)), torch.full((1,), -1.0, device=device))
+    
+def lr_from_hr(img_hr, image_size_lr, device='cpu'):
+    """
+    hr dans [-1, 1]
+    lr = interpolation(hr) dépasse de [-1, 1]
+    on seuille les valeurs qui dépassent
+    (le lr de SRGAN est dans [0, 1])
+    """
+    img_lr = _subsampling_interpolation(img_hr, image_size_lr)
+    img_lr = _crop_lr(img_lr, device)
+    return img_lr
+
+def _test_lr_from_hr():
+    # l'interpolation fait sortir de [-1, 1]
+    max_val = 0
+    for i in range(1000):
+        im_lr = _subsampling_interpolation(torch.rand((1,1,8,8)) * 2 - 1, (4,4))
+        max_val = max(max_val, torch.max(torch.abs(im_lr)))
+    assert max_val > 1.1
+    
+    # crop quand on est dans les bornes est inutile
+    im_lr0 = torch.tensor([[[[1., -1.], [-1., 1.]]]])
+    assert torch.all(_crop_lr(im_lr0) == im_lr0)
+    
+    # test du crop
+    im_lr1 = torch.tensor([[[[1.9, -1.], [-1., 1.]]]])
+    assert torch.all(_crop_lr(im_lr1) == im_lr0)
+    
+    
+def save_curr_vis(img_list, img_lr, img_hr, netG, G_losses, D_losses, cont_losses, plot_training):
     global print_process
     
     with torch.no_grad():
@@ -40,12 +73,12 @@ def save_curr_vis(img_list, img_lr, img_hr, netG, G_losses, D_losses, cont_losse
         print_process.start()
 
 
-def save_and_show(D_losses, G_losses, cont_losses, show_im):
+def save_and_show(net_g, net_d, optimizerG, optimizerD, D_losses, G_losses, cont_losses, show_im, write_root):
     if print_process is not None:
         print_process.terminate()
     
     # sauvegarde le réseau
-    write_path_ = _save()
+    write_path_ = _save(net_g, net_d, optimizerG, optimizerD, write_root)
     
     # attend que l'utilisateur soit là pour créer des figures
     input("appuyer sur une touche pour afficher")
@@ -54,7 +87,7 @@ def save_and_show(D_losses, G_losses, cont_losses, show_im):
     _anim(show_im, write_path_)
 
 
-def _save():
+def _save(net_g, net_d, optimizerG, optimizerD, write_root):
     if not input("sauvegarder ? Y/n") == "n":
         if not os.path.isdir(write_root):
             os.mkdir(write_root)
@@ -95,14 +128,14 @@ def _plot(D_losses, G_losses, cont_losses, show_im):
     plt.axis("off")
     plt.title("LR Images")
     plt.imshow(np.transpose(
-        vutils.make_grid(test_lr.to(device)[:4], padding=0, normalize=True, nrow=2).cpu(), (1, 2, 0)))
+        vutils.make_grid(test_lr[:4], padding=0, normalize=True, nrow=2), (1, 2, 0)))
     
     # Plot the HR images
     plt.subplot(2, 2, 3)
     plt.axis("off")
     plt.title("HR Images")
     plt.imshow(np.transpose(
-        vutils.make_grid(test_hr.to(device)[:4], padding=0, normalize=True, nrow=2).cpu(), (1, 2, 0)))
+        vutils.make_grid(test_hr[:4], padding=0, normalize=True, nrow=2).cpu(), (1, 2, 0)))
     
     # Plot the SR from the last epoch
     plt.subplot(2, 2, 2)
@@ -134,3 +167,7 @@ def _anim(show_im, write_path):
         ani.save(write_path + "_ani.mp4", writer=writer)
     
     plt.show()
+
+if __name__ == '__main__':
+    _test_lr_from_hr()
+    print("tests passés")
