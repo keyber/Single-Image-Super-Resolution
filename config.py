@@ -39,7 +39,7 @@ dataset_name, dataroot = "celeba", "/local/beroukhim/data/celeba"
 # affiche les reconstructions à la fin de chaque epoch
 plot_training = True # fait planter si n'arrive pas à afficher
 if plot_training:
-    print("PLOT TRAINING FERA PLANTER LE CODE SI LE SERVEUR X EST INACCESSIBLE")
+    print("PLOT TRAINING PEUT FAIRE PLANTER LE CODE SI LE SERVEUR X EST INACCESSIBLE")
 
 plot_first = True  # pas encore implémenté
 
@@ -54,7 +54,7 @@ batch_size = 16
 n_batch = 100
 
 # Number of training epochs
-num_epochs = 1
+num_epochs = 10
 
 # noinspection PyShadowingNames
 def gen_modules():
@@ -105,7 +105,7 @@ def gen_losses(net_content_extractor, identity):
     # noinspection PyShadowingNames
     def loss_weight_adv_g(i):
         if n_g[0] <= i < n_g[1]:
-            return 1e-3
+            return 1e-2
         return 0
     
     # noinspection PyShadowingNames
@@ -236,8 +236,8 @@ def gen_optimizers(checkpoint_path):
     if checkpoint_path is not None:
         try:
             checkpoint = torch.load(checkpoint_path)
-            net_g.load_state_dict(checkpoint['net_g'])
-            net_d.load_state_dict(checkpoint['net_d'])
+            optimizerG.load_state_dict(checkpoint['opti_g'])
+            optimizerD.load_state_dict(checkpoint['opti_d'])
         except Exception as e:
             print("erreur chargement optimizers", e)
             pass
