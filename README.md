@@ -13,7 +13,7 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
       - adverserial loss: Generator et Disciminator customisables
       - content loss via MaskedVGG (concaténation de VGG22, VG54, ...)
       - initialisation par défaut de PyTorch, on peut utiliser une MSE pendant 1 epoch comme initialisation
-      ![Résultats SRGAN](./results//SRGANx16_VGG0b01111_weight1.png)
+      ![Résultats SRGANx2](./results/x2.png)
     - Exécution du code sur GPU
     - Sauvegarde des réseaux entraînés
     - Lecture de AmbientGAN et de l'article d'Emmanuel
@@ -53,12 +53,13 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
   
   - 08/07
     - Augmentation graduelle du poids de la loss adversaire (par rapport à la content loss) tant que cela améliore le rendu.
+      ![Résultats SRGANx4](./results/x4_e-2_2epoch.png)
+      1ère ligne : LR SR HR USR 2ème ligne : interpolation bicubique de l'image d'au dessus
+  
     - Lecture de ESRGAN. Améliorations potentielles :
       - architecture de G
       - relativistic D
       - enlever les BatchNorm
-    
-  
 ## todo
   - améliorations potentielles pour l'implémentation de SRGAN (résultats déjà excellents)
     - poids de la content loss
