@@ -83,7 +83,7 @@ def train_loop():
             
             # content loss
             lw_cont, content_extractor = loss_weight_cont(epoch)
-            if lw_cont and content_extractor is not None :
+            if lw_cont :
                 if content_loss_on_lr:
                     fake_bruitee = utils.lr_from_hr(fake, image_size_lr[1:], device=device)
                     err = content_loss_g(content_extractor, img_lr, fake_bruitee)

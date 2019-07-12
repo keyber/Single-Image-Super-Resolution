@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 
 def main():
-    net_g = Generator(n_blocks=16, n_features_block=64, n_features_last=256, scale_twice=1, input_channels=3)
+    net_g = Generator(n_blocks=16, n_features_block=64, n_features_last=256, list_scales=[2, 2], input_channels=3)
     net_g.eval()
     net_g.requires_grad = False
     

@@ -21,7 +21,7 @@ progressive = 0
 forward_twice = 0
 
 # false: x4 pixels   -  true: x16
-scale_twice = 1
+scale_twice = 2
 print("forward_twice", forward_twice, "scale_twice", scale_twice, "progressive", progressive)
 
 # content loss sur les images basse résolution comme dans AmbientGAN
@@ -50,11 +50,11 @@ lr = 1e-4
 normalized_gradient = False # plante quand erreur D nulle
 
 # Batch size during training
-batch_size = 16
-n_batch = 100
+batch_size = 1
+n_batch = 10
 
 # Number of training epochs
-num_epochs = 10
+num_epochs = 2
 
 # noinspection PyShadowingNames
 def gen_modules():
@@ -63,7 +63,7 @@ def gen_modules():
         net_g = GeneratorProgresiveBase(n_blocks=16, n_features=64)
         net_g = GeneratorSuffix(net_g, n_features=64)
     else:
-        net_g = Generator(n_blocks=16, n_features_block=64, n_features_last=256, forward_twice=forward_twice, scale_twice=scale_twice, input_channels=image_size_lr[0])
+        net_g = Generator(list_scales=[2, 2], n_blocks=16, n_features_block=64, n_features_last=256, forward_twice=forward_twice, input_channels=image_size_lr[0])
     
     net_d = Discriminator(image_size_hr, list_n_features=[64, 64, 128, 128, 256, 256, 512, 512],
                            list_stride=[1, 2, 1, 2, 1, 2, 1, 2])
@@ -97,15 +97,15 @@ def gen_modules():
 # noinspection PyShadowingNames
 def gen_losses(net_content_extractor, identity):
     n = num_epochs
-    n_g = 0, n
-    n_d = 0, n
-    n_content = 0, n
-    n_identity = 0, 0
+    n_g = 1, n
+    n_d = 1, n
+    n_content = 1, n
+    n_identity = 0, 1
     
     # noinspection PyShadowingNames
     def loss_weight_adv_g(i):
         if n_g[0] <= i < n_g[1]:
-            return 1e-2
+            return 5e-2
         return 0
     
     # noinspection PyShadowingNames
@@ -225,7 +225,7 @@ def gen_device(net_g, net_d, net_content_extractor):
         net_d = nn.DataParallel(net_d, list(range(ngpu)))
         if net_content_extractor is not None:
             net_content_extractor = nn.DataParallel(net_content_extractor, list(range(ngpu)))
-
+    
     return device, net_g, net_d, net_content_extractor
 
 # noinspection PyShadowingNames
@@ -245,13 +245,13 @@ def gen_optimizers(checkpoint_path):
     return optimizerG, optimizerD
 
 gen_seed()
-image_size_lr, image_size_hr, dataloader_hr = gen_dataset()
+image_size_lr, image_size_hr, dataloader_hr =                                gen_dataset()
 if n_batch == -1:
     n_batch = len(dataloader_hr)
-net_g, net_d, identity, net_content_extractor, criterion, checkpoint_path = gen_modules()
-device, net_g, net_d, net_content_extractor = gen_device(net_g, net_d, net_content_extractor)
-optimizerG, optimizerD = gen_optimizers(checkpoint_path)
-loss_weight_adv_g, loss_weight_adv_d, loss_weight_cont = gen_losses(net_content_extractor, identity)
-schedulerG, schedulerD = gen_scheduler(optimizerG, optimizerD)
-real_label, real_label_reduced, fake_label = gen_label(device)
+net_g, net_d, identity, net_content_extractor, criterion, checkpoint_path =  gen_modules()
+device, net_g, net_d, net_content_extractor =                                gen_device(net_g, net_d, net_content_extractor)
+optimizerG, optimizerD =                                                     gen_optimizers(checkpoint_path)
+loss_weight_adv_g, loss_weight_adv_d, loss_weight_cont =                     gen_losses(net_content_extractor, identity)
+schedulerG, schedulerD =                                                     gen_scheduler(optimizerG, optimizerD)
+real_label, real_label_reduced, fake_label =                                 gen_label(device)
 
