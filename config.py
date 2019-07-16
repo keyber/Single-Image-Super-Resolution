@@ -6,23 +6,18 @@ import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import torchvision.transforms.functional
 
-from model_generator_progressive import GeneratorProgresiveBase, GeneratorSuffix
 from model_generator import Generator
 from model_discriminator import Discriminator
 import model_content_extractor
-
+import utils
+import numpy as np
 
 # commande à utiliser pour lancer le script en restreignant les GPU visibles
 #CUDA_VISIBLE_DEVICES=1,2 python3 train.py
 
-progressive = 0
-
-# augmente deux fois la résolution en retournant G(G(x))
-forward_twice = 0
-
-# false: x4 pixels   -  true: x16
-scale_twice = 2
-print("forward_twice", forward_twice, "scale_twice", scale_twice, "progressive", progressive)
+list_scales = [2, 2, 2]
+scale_factor = np.prod(list_scales)
+print("list_scales", list_scales)
 
 # content loss sur les images basse résolution comme dans AmbientGAN
 content_loss_on_lr = False
@@ -41,7 +36,7 @@ plot_training = True # fait planter si n'arrive pas à afficher
 if plot_training:
     print("PLOT TRAINING PEUT FAIRE PLANTER LE CODE SI LE SERVEUR X EST INACCESSIBLE")
 
-plot_first = True  # pas encore implémenté
+plot_first = True
 
 # Learning rate for optimizers
 lr = 1e-4
@@ -50,37 +45,31 @@ lr = 1e-4
 normalized_gradient = False # plante quand erreur D nulle
 
 # Batch size during training
-batch_size = 1
-n_batch = 10
+batch_size = 16
+n_batch = 1000
 
 # Number of training epochs
-num_epochs = 2
+num_epochs = 1
 
 # noinspection PyShadowingNames
-def gen_modules():
+def gen_modules(ngpu):
     # Create the generator and discriminator
-    if progressive:
-        net_g = GeneratorProgresiveBase(n_blocks=16, n_features=64)
-        net_g = GeneratorSuffix(net_g, n_features=64)
-    else:
-        net_g = Generator(list_scales=[2, 2], n_blocks=16, n_features_block=64, n_features_last=256, forward_twice=forward_twice, input_channels=image_size_lr[0])
+    net_g = Generator(list_scales=list_scales, n_blocks=16, n_features_block=64, n_features_last=256, input_channels=image_size_lr[0])
     
     net_d = Discriminator(image_size_hr, list_n_features=[64, 64, 128, 128, 256, 256, 512, 512],
                            list_stride=[1, 2, 1, 2, 1, 2, 1, 2])
     
     try:
         path = input("entrer le chemin de sauvegarde du réseau à charger:\n")
-        checkpoint = torch.load(path)
-        net_g.load_state_dict(checkpoint['net_g'])
-        net_d.load_state_dict(checkpoint['net_d'])
+        checkpoint = torch.load(path, map_location='cpu')
+        net_g.load_state_dict(checkpoint['net_g'], strict=False)
+        net_d.load_state_dict(checkpoint['net_d'], strict=False)
         print("lecture réussie")
-    except Exception as e:
+    except OSError as e:
         path = None
         print("lecture échouée", e)
     
-    if progressive == 2:
-        net_g.beginning[0].requires_grad = False
-        net_g = GeneratorSuffix(net_g.beginning, n_features=16)
+    # net_g.freeze()
     
     # create a feature extractor
     identity = model_content_extractor.identity()
@@ -91,6 +80,18 @@ def gen_modules():
     
     # Initialize BCELoss function  #binary cross entropy
     criterion = torch.nn.BCELoss()
+    
+    net_g = net_g.to(device)
+    net_d = net_d.to(device)
+    if net_content_extractor is not None:
+        net_content_extractor = net_content_extractor.to(device)
+    
+    if (device.type == 'cuda') and (ngpu > 1):
+        net_g = nn.DataParallel(net_g, list(range(ngpu)))
+        net_d = nn.DataParallel(net_d, list(range(ngpu)))
+        if net_content_extractor is not None:
+            net_content_extractor = nn.DataParallel(net_content_extractor, list(range(ngpu)))
+
     
     return net_g, net_d, identity, net_content_extractor, criterion, path
 
@@ -140,7 +141,7 @@ def gen_scheduler(optimizerG, optimizerD):
     return schedulerG, schedulerD
 
 # noinspection PyShadowingNames
-def gen_label(device):
+def gen_label():
     # Establish convention for real and fake labels during training
     real_label = torch.full((batch_size,), 1.0, device=device)
     real_label_reduced = torch.full((batch_size,), .9, device=device)
@@ -160,24 +161,17 @@ def gen_dataset():
     if dataset_name == 'celeba':
         # Spatial size of training images. All images will be resized to this size using a transformer.
         image_size_hr = (3, 128, 128)
-        if scale_twice or forward_twice or progressive==2:
-            image_size_lr = (3, 32, 32)
-        else:
-            image_size_lr = (3, 64, 64)
     elif dataset_name == 'flickr':
         image_size_hr = (3, 128, 128)
-        if scale_twice or forward_twice or progressive==2:
-            image_size_lr = (3, 32, 32)
-        else:
-            image_size_lr = (3, 64, 64)
     elif dataset_name == 'mnist':
         image_size_hr = (1, 28, 28)
-        if scale_twice or forward_twice or progressive==2:
-            image_size_lr = (1, 7, 7)  # visuellement difficile
-        else:
-            image_size_lr = (1, 14, 14)
     else:
         raise FileNotFoundError
+    
+    image_size_lr = image_size_hr[0], image_size_hr[1] // scale_factor, image_size_hr[2] // scale_factor
+    
+    if image_size_hr[1] % scale_factor or image_size_hr[2] % scale_factor:
+        print("images trop petites", image_size_hr, image_size_lr)
 
     # We can use an image folder dataset the way we have it setup.
     # Create the datasets and the dataloaders
@@ -204,29 +198,31 @@ def gen_dataset():
                                                 ]))
     else:
         raise FileNotFoundError
-
-    dataloader_hr = torch.utils.data.DataLoader(dataset_hr, batch_size=batch_size, num_workers=2, drop_last=True)
-    return image_size_lr, image_size_hr, dataloader_hr
+    
+    class FirstN(torch.utils.data.sampler.Sampler):
+        def __init__(self, n):
+            super().__init__(n)
+            self.n = n
+        def __iter__(self):
+            return iter(range(self.n))
+        def __len__(self):
+            return self.n
+    
+    dataloader_hr = torch.utils.data.DataLoader(dataset_hr, sampler=FirstN(len(dataset_hr) - batch_size), batch_size=batch_size, drop_last=True)
+    # test_hr = torch.cat(dataset_hr[-batch_size:, 0])
+    test_hr = torch.cat([torch.unsqueeze(dataset_hr[i][0], 0) for i in range(-batch_size, 0)]).to(device)
+    test_lr = utils.lr_from_hr(test_hr, image_size_lr[1:], device=device)
+    return image_size_lr, image_size_hr, dataloader_hr, (test_hr, test_lr)
 
 # noinspection PyShadowingNames
-def gen_device(net_g, net_d, net_content_extractor):
+def gen_device():
     # Number of GPUs available. Use 0 for CPU mode.
     ngpu = torch.cuda.device_count()
     
     # Decide which device we want to run on
     device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
-    net_g = net_g.to(device)
-    net_d = net_d.to(device)
-    if net_content_extractor is not None:
-        net_content_extractor = net_content_extractor.to(device)
     
-    if (device.type == 'cuda') and (ngpu > 1):
-        net_g = nn.DataParallel(net_g, list(range(ngpu)))
-        net_d = nn.DataParallel(net_d, list(range(ngpu)))
-        if net_content_extractor is not None:
-            net_content_extractor = nn.DataParallel(net_content_extractor, list(range(ngpu)))
-    
-    return device, net_g, net_d, net_content_extractor
+    return device, ngpu
 
 # noinspection PyShadowingNames
 def gen_optimizers(checkpoint_path):
@@ -235,23 +231,23 @@ def gen_optimizers(checkpoint_path):
     
     if checkpoint_path is not None:
         try:
-            checkpoint = torch.load(checkpoint_path)
+            checkpoint = torch.load(checkpoint_path, map_location='cpu')
             optimizerG.load_state_dict(checkpoint['opti_g'])
             optimizerD.load_state_dict(checkpoint['opti_d'])
         except Exception as e:
-            print("erreur chargement optimizers", e)
+            print("erreur chargement optimizers:", e)
             pass
         
     return optimizerG, optimizerD
 
 gen_seed()
-image_size_lr, image_size_hr, dataloader_hr =                                gen_dataset()
+device, _ngpu =                                                              gen_device()
+image_size_lr, image_size_hr, dataloader_hr, (test_hr, test_lr) =            gen_dataset()
 if n_batch == -1:
     n_batch = len(dataloader_hr)
-net_g, net_d, identity, net_content_extractor, criterion, checkpoint_path =  gen_modules()
-device, net_g, net_d, net_content_extractor =                                gen_device(net_g, net_d, net_content_extractor)
+net_g, net_d, identity, net_content_extractor, criterion, checkpoint_path =  gen_modules(_ngpu)
 optimizerG, optimizerD =                                                     gen_optimizers(checkpoint_path)
 loss_weight_adv_g, loss_weight_adv_d, loss_weight_cont =                     gen_losses(net_content_extractor, identity)
 schedulerG, schedulerD =                                                     gen_scheduler(optimizerG, optimizerD)
-real_label, real_label_reduced, fake_label =                                 gen_label(device)
+real_label, real_label_reduced, fake_label =                                 gen_label()
 

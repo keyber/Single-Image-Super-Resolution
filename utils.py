@@ -128,14 +128,14 @@ def _plot(D_losses, G_losses, cont_losses, show_im):
     plt.axis("off")
     plt.title("LR Images")
     plt.imshow(np.transpose(
-        vutils.make_grid(test_lr[:4], padding=0, normalize=True, nrow=2), (1, 2, 0)))
+        vutils.make_grid(test_lr[:4].detach().cpu(), padding=0, normalize=True, nrow=2), (1, 2, 0)))
     
     # Plot the HR images
     plt.subplot(2, 2, 3)
     plt.axis("off")
     plt.title("HR Images")
     plt.imshow(np.transpose(
-        vutils.make_grid(test_hr[:4], padding=0, normalize=True, nrow=2).cpu(), (1, 2, 0)))
+        vutils.make_grid(test_hr[:4].detach().cpu(), padding=0, normalize=True, nrow=2).cpu(), (1, 2, 0)))
     
     # Plot the SR from the last epoch
     plt.subplot(2, 2, 2)

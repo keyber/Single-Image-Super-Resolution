@@ -58,7 +58,8 @@ class Generator(nn.Module):
         
         a = self.state_dict()
         b = state_dict
-        if a != b:
+        # noinspection PyTypeChecker
+        if a.keys() != b.keys() or any(torch.any(a[k] != b[k]) for k in a.keys()):
             n_param_a = sum([x.nelement() for x in set(a.values())])
             n_param_b = sum([x.nelement() for x in set(b.values())])
             n_param_inter = sum([a[x].nelement() for x in set(a.keys()) & set(b.keys())])
@@ -72,8 +73,8 @@ class Generator(nn.Module):
             print("  - manquants    :", len(manquants), manquants)
             non_utilises = b.keys() - a.keys()
             print("  - non utilisés :", len(non_utilises), non_utilises)
-            
-            
+    
+    
     def _sub_forward(self, x):
         # print("gen", x.shape)
         # for l in self.layers:
@@ -100,6 +101,13 @@ class Generator(nn.Module):
             x = self._sub_forward(x)
         
         return x
+    
+    def freeze(self):
+        layer_list = [self.first_layers, self.block_list, self.block_list_end]
+        for layer in layer_list:
+            layer.requires_grad=False
+            for x in layer.parameters():
+                x.requires_grad = False
 
 def _test():
     from time import time

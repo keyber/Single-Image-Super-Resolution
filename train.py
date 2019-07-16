@@ -2,14 +2,14 @@ import torch.utils.data
 import torch.nn
 import torch.nn.functional
 
-import numpy as np
 from time import time
-import utils
 from config import *
 
 
 def main():
-    D_losses, G_losses, cont_loss, show_im = train_loop()
+    D_losses, G_losses, cont_loss, img_list = train_loop()
+
+    show_im = (test_lr, test_hr, img_list)
 
     # Affichage des résultats
     utils.save_and_show(net_g, net_d, optimizerG, optimizerD, D_losses, G_losses, cont_loss, show_im, write_root)
@@ -28,7 +28,6 @@ def train_loop():
     _zero = torch.zeros(1).to(device)
     print_period = max(1, n_batch//10)
     t = time()
-    test_lr, test_hr = None, None
     
     print("Starting Training Loop...")
     for epoch in range(num_epochs):
@@ -36,10 +35,10 @@ def train_loop():
             img_hr = img_hr.to(device)
             img_lr = utils.lr_from_hr(img_hr, image_size_lr[1:], device=device)
             
-            if i == n_batch or i == len(dataloader_hr) - 1:
-                test_lr, test_hr = img_lr.cpu(), img_hr.cpu()
-                utils.save_curr_vis(img_list, img_lr, img_hr, net_g, G_losses, D_losses, cont_losses, plot_training)
-                break
+            if i == n_batch - 1 or (plot_first and epoch==0 and i==0):
+                utils.save_curr_vis(img_list, test_lr, test_hr, net_g, G_losses, D_losses, cont_losses, plot_training)
+                if i == n_batch - 1:
+                    break
             
             real = img_hr
             
@@ -51,24 +50,26 @@ def train_loop():
                 # Update the Discriminator with adversarial loss
                 net_d.zero_grad()
                 D_G_z1, D_x, errD = adversarial_loss_d(real, fake, list_fakes)
+
+                # sauvegarde un batch sur 10
+                if i % 10 == 0:
+                    old = fake.detach()
+                    # écrase un ancien aléatoirement pour ne pas prendre trop de RAM
+                    if len(list_fakes) == 100:
+                        list_fakes[random.randint(0, 99)] = old
+                    else:
+                        list_fakes.append(old)
+
                 errD *= lw_adv_d
-                
                 if normalized_gradient:
                     (errD / errD.item()).backward()
                 else:
                     errD.backward()
                 optimizerD.step()
+
             else:
                 D_G_z1, D_x, errD  = 0, 0, _zero
             
-            # sauvegarde un batch sur 10
-            if i%10 == 0:
-                old = fake.detach()
-                # écrase un ancien aléatoirement pour ne pas prendre trop de RAM
-                if len(list_fakes)==100:
-                    list_fakes[random.randint(0,99)] = old
-                else:
-                    list_fakes.append(old)
             
             # Update the Generator
             net_g.zero_grad()
@@ -105,7 +106,7 @@ def train_loop():
             # Output training stats
             if i % print_period == 0:
                 print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G_adv: %.4f\tLoss_G_con: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
-                      % (epoch, num_epochs, i, len(dataloader_hr),
+                      % (epoch, num_epochs, i, n_batch,
                          errD.item(), errG_adv.item(), errG_cont.item(), D_x, D_G_z1, D_G_z2))
             
             # Save Losses for plotting later
@@ -117,7 +118,7 @@ def train_loop():
             schedulerG.step()
     
     print("train loop in", time() - t)
-    return D_losses, G_losses, cont_losses, (test_lr, test_hr, img_list)
+    return D_losses, G_losses, cont_losses, img_list
 
 
 def adversarial_loss_d(real, curr_fake, old_fakes):

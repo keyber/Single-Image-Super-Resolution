@@ -58,5 +58,5 @@ class Discriminator(nn.Module):
         x = self.conv(x)
         x = x.view(x0.shape[0], self.fc_in)
         x = self.fc(x)
-        print("dis", x.shape)
+        # print("dis", x.shape)
         return x
