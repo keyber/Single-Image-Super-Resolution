@@ -39,7 +39,7 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
   
   - 01/07
     - La dernière features map de G avant upsampling était de taille 64, elle passe à 256 comme dans l'article de SRGAN
-    - Améliorations pour entraînement x4:
+    - Améliorations (infructueuses) pour entraînement x4:
       - Initialisation de G en utilisant seulement une MSE pendant une epoch,
         puis entraînement du discriminateur uniquement (moins d'une epoch pour éviter le sur-apprentissage)
       - real_label = .9 (au lieu de 1) pour que D ne soit pas sûr de lui
@@ -47,14 +47,14 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
       - Normalisation des gradients à 1 (c'est en fait mieux sans)
       - spectralNorm dans G et D
       - features map pour la content loss extraites avant activation
-    - Le calcul de lr par interpolation de hr, on dépasse un peu de [-1, 1]. On rescale les images dans [-1, 1] si elles dépassent de l'intervalle.
+    - Le calcul de lr par interpolation de hr, on dépasse un peu de [-1, 1]. On seuille les images dans [-1, 1].
     - En partant d'un mếme réseau (avec un dataset non mélangé), deux entraînements donnent des images complètement différentes,
       on peut mettre torch.backends.cudnn.deterministic = True et torch.backends.cudnn.benchmark = False
   
   - 08/07
-    - Augmentation graduelle du poids de la loss adversaire (par rapport à la content loss) tant que cela améliore le rendu.
+    - Implémentation d'une méthode assurant des résultats corrects: augmentation graduelle du poids de la loss adversaire (par rapport à la content loss) tant que cela améliore le rendu.
     
-    - Création d'un script de visualisation des résultas
+    - Création d'un script de visualisation des résultats
       ![Résultats SRGANx4](./results/x4_e-2_2epoch.png)
       (1ère ligne : LR SR HR UR 2ème ligne : interpolation bicubique de l'image d'au dessus)
   
@@ -63,20 +63,24 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
       - relativistic D
       - enlever les BatchNorm
     
-  
   - 15/07
     - Progressive Generator:
+      - Un réseau x4 = x2x2 est constitué de toutes les couches d'un réseau x2 plus une couche d'upscale.
+        90% des poids d'un réseau x4 peuvent être chargés à partir d'un réseau x2.
+        Le réseau est dans ce cas bien meilleur qu'un réseau x4 entraîné 'from scratch' (pour une même durée d'entraînement).
+      - On peut geler toutes les couches à part celle rajoutée afin d'aller plus vite
       - Implémenté via "load_state_dict(strict=False)". Il y a des bugs e.g. https://github.com/pytorch/pytorch/pull/22545.
-      - Un réseau x4 entraîné à partir d'un réseau x2 est meilleur
-      - On peut geler toutes les couches à part la convolution rajoutée afin d'aller plus vite
       - Les images de celeba sont trop petites pour le x8. La MSE est floue, le GAN invente un visage:
         ![Flou](./results/flou.png)       ![Invente](./results/invente.png)
+    - Modèle supervisé ou non:
+    ![Architecture](./results/architecture.png)
+      - Les résultats sont meilleurs avec supervision, le mode non-supervisé est utile si on n'a pas accès à un dataset d'images en haute qualité
+    
   
 ## todo
-  - améliorations potentielles pour l'implémentation de SRGAN (résultats déjà excellents)
-    - poids de la content loss
-    - lr_decay
-    - télécharger la même base de données que dans l'article pour pouvoir comparer
-    - ajouter des tests
+  - ajouter des tests
+  - ajouter des métriques
+  - télécharger la même base de données que dans l'article pour pouvoir comparer
+  - entraîner un réseau x8
     
   
