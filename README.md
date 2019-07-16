@@ -70,8 +70,7 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
       - Un réseau x4 entraîné à partir d'un réseau x2 est meilleur
       - On peut geler toutes les couches à part la convolution rajoutée afin d'aller plus vite
       - Les images de celeba sont trop petites pour le x8. La MSE est floue, le GAN invente un visage:
-      <img src="./results/invente.png" width="100">
-      ![Invente](./results/invente.png | width=100)
+        ![Flou](./results/flou.png)       ![Invente](./results/invente.png)
   
 ## todo
   - améliorations potentielles pour l'implémentation de SRGAN (résultats déjà excellents)
