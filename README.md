@@ -53,13 +53,26 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
   
   - 08/07
     - Augmentation graduelle du poids de la loss adversaire (par rapport à la content loss) tant que cela améliore le rendu.
+    
+    - Création d'un script de visualisation des résultas
       ![Résultats SRGANx4](./results/x4_e-2_2epoch.png)
-      1ère ligne : LR SR HR USR 2ème ligne : interpolation bicubique de l'image d'au dessus
+      (1ère ligne : LR SR HR UR 2ème ligne : interpolation bicubique de l'image d'au dessus)
   
     - Lecture de ESRGAN. Améliorations potentielles :
       - architecture de G
       - relativistic D
       - enlever les BatchNorm
+    
+  
+  - 15/07
+    - Progressive Generator:
+      - Implémenté via "load_state_dict(strict=False)". Il y a des bugs e.g. https://github.com/pytorch/pytorch/pull/22545.
+      - Un réseau x4 entraîné à partir d'un réseau x2 est meilleur
+      - On peut geler toutes les couches à part la convolution rajoutée afin d'aller plus vite
+      - Les images de celeba sont trop petites pour le x8. La MSE est floue, le GAN invente un visage:
+      <img src="./results/invente.png" width="100">
+      ![Invente](./results/invente.png | width=100)
+  
 ## todo
   - améliorations potentielles pour l'implémentation de SRGAN (résultats déjà excellents)
     - poids de la content loss
