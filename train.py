@@ -31,16 +31,23 @@ def train_loop():
     
     print("Starting Training Loop...")
     for epoch in range(num_epochs):
-        for i, (img_hr, _) in enumerate(dataloader_hr):
-            img_hr = img_hr.to(device)
-            img_lr = utils.lr_from_hr(img_hr, image_size_lr[1:], device=device)
-            
+        for i, (img_hr, img_hr2) in enumerate(dataloader_hr):
             if i == n_batch - 1 or (plot_first and epoch==0 and i==0):
                 utils.save_curr_vis(img_list, test_lr, test_hr, net_g, G_losses, D_losses, cont_losses, plot_training)
                 if i == n_batch - 1:
                     break
             
-            real = img_hr
+            # différent dataset pour le unsupervised
+            if content_loss_on_lr:
+                img_hr, _ = img_hr
+                img_hr2, _ = img_hr2
+            
+            img_hr = img_hr.to(device)
+            img_lr = utils.lr_from_hr(img_hr, image_size_lr[1:], device=device)
+            
+            if content_loss_on_lr:
+                # on remplace les hr par des hr d'un autre dataset car le modèle ne doit pas avoir accès à l'image HR
+                img_hr = img_hr2.to(device)
             
             # Generate fake image batch with G
             fake = net_g(img_lr)
@@ -49,7 +56,7 @@ def train_loop():
             if lw_adv_d:
                 # Update the Discriminator with adversarial loss
                 net_d.zero_grad()
-                D_G_z1, D_x, errD = adversarial_loss_d(real, fake, list_fakes)
+                D_G_z1, D_x, errD = adversarial_loss_d(img_hr, fake, list_fakes)
 
                 # sauvegarde un batch sur 10
                 if i % 10 == 0:
@@ -89,7 +96,7 @@ def train_loop():
                     fake_bruitee = utils.lr_from_hr(fake, image_size_lr[1:], device=device)
                     err = content_loss_g(content_extractor, img_lr, fake_bruitee)
                 else:
-                    err = content_loss_g(content_extractor, real, fake)
+                    err = content_loss_g(content_extractor, img_hr, fake)
                 errG_cont = err * lw_cont
             else:
                 errG_cont = _zero

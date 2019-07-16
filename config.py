@@ -15,12 +15,12 @@ import numpy as np
 # commande à utiliser pour lancer le script en restreignant les GPU visibles
 #CUDA_VISIBLE_DEVICES=1,2 python3 train.py
 
-list_scales = [2, 2, 2]
+list_scales = [2, 2]
 scale_factor = np.prod(list_scales)
 print("list_scales", list_scales)
 
 # content loss sur les images basse résolution comme dans AmbientGAN
-content_loss_on_lr = False
+content_loss_on_lr = True
 
 #root directory for trained models
 write_root = "/local/beroukhim/srgan_trained/"
@@ -32,7 +32,7 @@ dataset_name, dataroot = "celeba", "/local/beroukhim/data/celeba"
 # dataset_name, dataroot = "mnist" , "/local/beroukhim/data/mnist"
 
 # affiche les reconstructions à la fin de chaque epoch
-plot_training = True # fait planter si n'arrive pas à afficher
+plot_training = False # fait planter si n'arrive pas à afficher
 if plot_training:
     print("PLOT TRAINING PEUT FAIRE PLANTER LE CODE SI LE SERVEUR X EST INACCESSIBLE")
 
@@ -46,10 +46,10 @@ normalized_gradient = False # plante quand erreur D nulle
 
 # Batch size during training
 batch_size = 16
-n_batch = 1000
+n_batch = -1
 
 # Number of training epochs
-num_epochs = 1
+num_epochs = 3
 
 # noinspection PyShadowingNames
 def gen_modules(ngpu):
@@ -106,7 +106,10 @@ def gen_losses(net_content_extractor, identity):
     # noinspection PyShadowingNames
     def loss_weight_adv_g(i):
         if n_g[0] <= i < n_g[1]:
-            return 5e-2
+            if content_loss_on_lr:
+                return 2e-3
+            else:
+                return 5e-2
         return 0
     
     # noinspection PyShadowingNames
@@ -157,7 +160,7 @@ def gen_seed():
     torch.manual_seed(seed)
 
 # noinspection PyShadowingNames
-def gen_dataset():
+def gen_dataset(n_batch):
     if dataset_name == 'celeba':
         # Spatial size of training images. All images will be resized to this size using a transformer.
         image_size_hr = (3, 128, 128)
@@ -199,20 +202,24 @@ def gen_dataset():
     else:
         raise FileNotFoundError
     
-    class FirstN(torch.utils.data.sampler.Sampler):
-        def __init__(self, n):
-            super().__init__(n)
-            self.n = n
-        def __iter__(self):
-            return iter(range(self.n))
-        def __len__(self):
-            return self.n
+    n = (len(dataset_hr) - batch_size)//2
+    if not content_loss_on_lr:
+        dataloader_hr = torch.utils.data.DataLoader(dataset_hr, sampler=utils.SamplerRange(0, 2*n), batch_size=batch_size, drop_last=True)
+        size = len(dataloader_hr)
+    else:
+        d1 = torch.utils.data.DataLoader(dataset_hr, sampler=utils.SamplerRange(0,   n), batch_size=batch_size, drop_last=True)
+        d2 = torch.utils.data.DataLoader(dataset_hr, sampler=utils.SamplerRange(n, 2*n), batch_size=batch_size, drop_last=True)
+        assert len(d1) == len(d2)
+        size = len(d1)
+        dataloader_hr = zip(d1, d2)
     
-    dataloader_hr = torch.utils.data.DataLoader(dataset_hr, sampler=FirstN(len(dataset_hr) - batch_size), batch_size=batch_size, drop_last=True)
-    # test_hr = torch.cat(dataset_hr[-batch_size:, 0])
     test_hr = torch.cat([torch.unsqueeze(dataset_hr[i][0], 0) for i in range(-batch_size, 0)]).to(device)
     test_lr = utils.lr_from_hr(test_hr, image_size_lr[1:], device=device)
-    return image_size_lr, image_size_hr, dataloader_hr, (test_hr, test_lr)
+    
+    if n_batch != -1:
+        size = min(size, n_batch)
+    
+    return image_size_lr, image_size_hr, dataloader_hr, (test_hr, test_lr), size
 
 # noinspection PyShadowingNames
 def gen_device():
@@ -242,9 +249,7 @@ def gen_optimizers(checkpoint_path):
 
 gen_seed()
 device, _ngpu =                                                              gen_device()
-image_size_lr, image_size_hr, dataloader_hr, (test_hr, test_lr) =            gen_dataset()
-if n_batch == -1:
-    n_batch = len(dataloader_hr)
+image_size_lr, image_size_hr, dataloader_hr, (test_hr, test_lr), n_batch =   gen_dataset(n_batch)
 net_g, net_d, identity, net_content_extractor, criterion, checkpoint_path =  gen_modules(_ngpu)
 optimizerG, optimizerD =                                                     gen_optimizers(checkpoint_path)
 loss_weight_adv_g, loss_weight_adv_d, loss_weight_cont =                     gen_losses(net_content_extractor, identity)
