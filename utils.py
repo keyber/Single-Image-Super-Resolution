@@ -168,6 +168,19 @@ def _anim(show_im, write_path):
     
     plt.show()
 
+
+class SamplerRange(torch.utils.data.sampler.Sampler):
+    def __init__(self, a, b):
+        super().__init__(a)
+        self.a = a
+        self.b = b
+    
+    def __iter__(self):
+        return iter(range(self.a, self.b))
+    
+    def __len__(self):
+        return self.b - self.a
+
 if __name__ == '__main__':
     _test_lr_from_hr()
     print("tests passés")

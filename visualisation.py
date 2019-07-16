@@ -32,7 +32,8 @@ def main():
                                       transforms.ToTensor(),
                                       transforms.Normalize((.5, .5, .5), (.5, .5, .5))]))
     n_im = 1
-    dataloader_hr = torch.utils.data.DataLoader(dataset_hr, batch_size=n_im)
+    # dataset_hr = [dataset_hr[i] for i in range(-10, 0)]
+    dataloader_hr = torch.utils.data.DataLoader(dataset_hr, sampler=utils.SamplerRange(0, len(dataset_hr)), batch_size=n_im)
     
     with torch.no_grad():
         for hr, _ in dataloader_hr:
@@ -50,11 +51,15 @@ def display_image(data, image_size_uhr, n_im):
     figsize = image_size_uhr / dpi
     fig = plt.figure(figsize=(n * figsize, 2*figsize))
     width = 1/n
-    for i, img in enumerate(data):
+    titles_list = ['LR', 'SR', 'HR', 'UR']
+    for i in range(len(data)):
+        img = data[i]
+        title = titles_list[i]
         ax = fig.add_axes([i*width, .5, width, .5])  # left, bottom, width, height
         ax.axis('off')
+        plt.title(title)
         ax.imshow(img, interpolation='none')
-        ax = fig.add_axes([i*width, .0, width, .5])  # left, bottom, width, height
+        ax = fig.add_axes([i*width, .0, width, .5])
         ax.axis('off')
         ax.imshow(img, interpolation='bicubic')
 
