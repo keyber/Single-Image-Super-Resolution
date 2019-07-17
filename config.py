@@ -208,9 +208,9 @@ def gen_dataset(n_batch):
         size = len(dataloader_hr)
     else:
         class DoubleDataloader:
-            def __init__(self, d1, d2):
-                self.d1 = d1
-                self.d2 = d2
+            def __init__(self, dataloader1, dataloader2):
+                self.d1 = dataloader1
+                self.d2 = dataloader2
             def __iter__(self):
                 return zip(self.d1, self.d2)
         d1 = torch.utils.data.DataLoader(dataset_hr, sampler=utils.SamplerRange(0,   n), batch_size=batch_size, drop_last=True)
