@@ -213,6 +213,7 @@ def gen_dataset(n_batch):
                 self.d2 = dataloader2
             def __iter__(self):
                 return zip(self.d1, self.d2)
+        
         d1 = torch.utils.data.DataLoader(dataset_hr, sampler=utils.SamplerRange(0,   n), batch_size=batch_size, drop_last=True)
         d2 = torch.utils.data.DataLoader(dataset_hr, sampler=utils.SamplerRange(n, 2*n), batch_size=batch_size, drop_last=True)
         assert len(d1) == len(d2)
