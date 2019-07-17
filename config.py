@@ -20,7 +20,7 @@ scale_factor = np.prod(list_scales)
 print("list_scales", list_scales)
 
 # content loss sur les images basse résolution comme dans AmbientGAN
-content_loss_on_lr = True
+content_loss_on_lr = False
 
 #root directory for trained models
 write_root = "/local/beroukhim/srgan_trained/"
@@ -49,7 +49,7 @@ batch_size = 16
 n_batch = -1
 
 # Number of training epochs
-num_epochs = 3
+num_epochs = 1
 
 # noinspection PyShadowingNames
 def gen_modules(ngpu):
@@ -98,10 +98,10 @@ def gen_modules(ngpu):
 # noinspection PyShadowingNames
 def gen_losses(net_content_extractor, identity):
     n = num_epochs
-    n_g = 1, n
-    n_d = 1, n
-    n_content = 1, n
-    n_identity = 0, 1
+    n_g = 0, n
+    n_d = 0, n
+    n_content = 0, n
+    n_identity = 0, 0
     
     # noinspection PyShadowingNames
     def loss_weight_adv_g(i):
@@ -207,11 +207,18 @@ def gen_dataset(n_batch):
         dataloader_hr = torch.utils.data.DataLoader(dataset_hr, sampler=utils.SamplerRange(0, 2*n), batch_size=batch_size, drop_last=True)
         size = len(dataloader_hr)
     else:
+        class DoubleDataloader:
+            def __init__(self, d1, d2):
+                self.d1 = d1
+                self.d2 = d2
+            def __iter__(self):
+                return zip(self.d1, self.d2)
         d1 = torch.utils.data.DataLoader(dataset_hr, sampler=utils.SamplerRange(0,   n), batch_size=batch_size, drop_last=True)
         d2 = torch.utils.data.DataLoader(dataset_hr, sampler=utils.SamplerRange(n, 2*n), batch_size=batch_size, drop_last=True)
         assert len(d1) == len(d2)
         size = len(d1)
-        dataloader_hr = zip(d1, d2)
+        dataloader_hr = DoubleDataloader(d1, d2)
+        # dataloader_hr = zip(d1, d2)
     
     test_hr = torch.cat([torch.unsqueeze(dataset_hr[i][0], 0) for i in range(-batch_size, 0)]).to(device)
     test_lr = utils.lr_from_hr(test_hr, image_size_lr[1:], device=device)
