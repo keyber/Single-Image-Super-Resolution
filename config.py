@@ -218,8 +218,8 @@ def gen_dataset(n_batch):
         d2 = torch.utils.data.DataLoader(dataset_hr, sampler=utils.SamplerRange(n, 2*n), batch_size=batch_size, drop_last=True)
         assert len(d1) == len(d2)
         size = len(d1)
+        
         dataloader_hr = DoubleDataloader(d1, d2)
-        # dataloader_hr = zip(d1, d2)
     
     test_hr = torch.cat([torch.unsqueeze(dataset_hr[i][0], 0) for i in range(-batch_size, 0)]).to(device)
     test_lr = utils.lr_from_hr(test_hr, image_size_lr[1:], device=device)
