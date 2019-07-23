@@ -56,22 +56,22 @@ def train_loop():
             if lw_adv_d:
                 # Update the Discriminator with adversarial loss
                 net_d.zero_grad()
-                D_G_z1, D_x, errD = adversarial_loss_d(img_hr, fake, list_fakes)
+                curr_fake = fake.detach()
+                if dis_list_old_cpu:
+                    curr_fake = curr_fake.cpu()
+                
+                D_G_z1, D_x, errD = adversarial_loss_d(img_hr, curr_fake, list_fakes)
 
                 # sauvegarde un batch sur 10
-                if i % 10 == 0:
-                    old = fake.detach()
+                if i % dis_list_old_freq == 0:
                     # écrase un ancien aléatoirement pour ne pas prendre trop de RAM
-                    if len(list_fakes) == 100:
-                        list_fakes[random.randint(0, 99)] = old
+                    if len(list_fakes) == dis_list_old_len:
+                        list_fakes[random.randint(0, dis_list_old_len-1)] = curr_fake
                     else:
-                        list_fakes.append(old)
+                        list_fakes.append(curr_fake)
 
                 errD *= lw_adv_d
-                if normalized_gradient:
-                    (errD / errD.item()).backward()
-                else:
-                    errD.backward()
+                errD.backward()
                 optimizerD.step()
 
             else:
@@ -104,10 +104,7 @@ def train_loop():
             errG = errG_adv + errG_cont
             
             if lw_adv_g or lw_cont:
-                if normalized_gradient:
-                    (errG / errG.item()).backward()
-                else:
-                    errG.backward()
+                errG.backward()
                 optimizerG.step()
             
             # Output training stats
@@ -145,12 +142,18 @@ def adversarial_loss_d(real, curr_fake, old_fakes):
     D_G_z1 = torch.zeros(1)
     
     list_fakes = [curr_fake]
-    list_fakes += list(np.random.choice(old_fakes, len(old_fakes)//10, replace=False))
+    indices = np.random.choice(list(range(len(old_fakes))), int(len(old_fakes)*dis_list_old_ratio), replace=False)
+    list_fakes += [old_fakes[i] for i in indices]
+    
+    # ne semble marcher que si les données sont sur le GPU
+    # list_fakes += list(np.random.choice(old_fakes, int(len(old_fakes)*dis_list_old_ratio), replace=False))
     
     for fake in list_fakes:
+        if dis_list_old_cpu:
+            fake = fake.to(device)
         ## Train with all-fake batch
         # Classify all fake batch with D
-        d_fake = net_d(fake.detach()).view(-1)
+        d_fake = net_d(fake).view(-1)
         
         # Calculate D's loss on the all-fake batch
         errD_fake = criterion(d_fake, fake_label)

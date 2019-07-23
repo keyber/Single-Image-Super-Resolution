@@ -6,7 +6,7 @@ import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import torchvision.transforms.functional
 
-from model_generator import Generator
+from model_generator import Generator, GeneratorSuffix
 from model_discriminator import Discriminator
 import model_content_extractor
 import utils
@@ -15,12 +15,14 @@ import numpy as np
 # commande à utiliser pour lancer le script en restreignant les GPU visibles
 #CUDA_VISIBLE_DEVICES=1,2 python3 train.py
 
-list_scales = [2, 2]
-scale_factor = np.prod(list_scales)
-print("list_scales", list_scales)
+list_scales = [2]
+progressive_gan_suffix = 1
+scale_factor = np.prod(list_scales) * (2 if progressive_gan_suffix else 1)
+use_sn = True #use_sn bloque actuellement la réutilisation des poids du réseau dans une autre achitecture (progressiveGAN)
+print("list_scales", list_scales, "- progressive_gan_suffix", progressive_gan_suffix, "- sn", use_sn)
 
 # content loss sur les images basse résolution comme dans AmbientGAN
-content_loss_on_lr = False
+content_loss_on_lr = True
 
 #root directory for trained models
 write_root = "/local/beroukhim/srgan_trained/"
@@ -32,7 +34,7 @@ dataset_name, dataroot = "celeba", "/local/beroukhim/data/celeba"
 # dataset_name, dataroot = "mnist" , "/local/beroukhim/data/mnist"
 
 # affiche les reconstructions à la fin de chaque epoch
-plot_training = False # fait planter si n'arrive pas à afficher
+plot_training = True # fait planter si n'arrive pas à afficher
 if plot_training:
     print("PLOT TRAINING PEUT FAIRE PLANTER LE CODE SI LE SERVEUR X EST INACCESSIBLE")
 
@@ -41,9 +43,6 @@ plot_first = True
 # Learning rate for optimizers
 lr = 1e-4
 
-# normalise losses before backward
-normalized_gradient = False # plante quand erreur D nulle
-
 # Batch size during training
 batch_size = 16
 n_batch = -1
@@ -51,14 +50,20 @@ n_batch = -1
 # Number of training epochs
 num_epochs = 1
 
+dis_list_old_len = 10  # nombre max de batch sauvegardés
+dis_list_old_freq = 10  # fréquence de sauvegarde des batchs
+dis_list_old_ratio = .1 # ratio de batchs de la liste tirés aléatoirement pour être présentés à D
+dis_list_old_cpu = True # stocke la liste sur le CPU (à utiliser pour enlever de la charge sur le GPU)
+
 # noinspection PyShadowingNames
 def gen_modules(ngpu):
     # Create the generator and discriminator
-    net_g = Generator(list_scales=list_scales, n_blocks=16, n_features_block=64, n_features_last=256, input_channels=image_size_lr[0])
+    net_g = Generator(list_scales=list_scales, n_blocks=16, n_features_block=64, n_features_last=256, input_channels=image_size_lr[0], use_sn=use_sn)
+    if progressive_gan_suffix == 2:
+        net_g = GeneratorSuffix(net_g)
     
     net_d = Discriminator(image_size_hr, list_n_features=[64, 64, 128, 128, 256, 256, 512, 512],
                            list_stride=[1, 2, 1, 2, 1, 2, 1, 2])
-    
     try:
         path = input("entrer le chemin de sauvegarde du réseau à charger:\n")
         checkpoint = torch.load(path, map_location='cpu')
@@ -69,6 +74,9 @@ def gen_modules(ngpu):
         path = None
         print("lecture échouée", e)
     
+    if progressive_gan_suffix == 1:
+        net_g = GeneratorSuffix(net_g)
+        # net_g = GeneratorSuffix(net_g, freeze_prefix=True, freeze_upscale=True, freeze_end=True)
     # net_g.freeze()
     
     # create a feature extractor
@@ -100,14 +108,14 @@ def gen_losses(net_content_extractor, identity):
     n = num_epochs
     n_g = 0, n
     n_d = 0, n
-    n_content = 0, n
-    n_identity = 0, 0
+    n_content = 0, 0
+    n_identity = 0, n
     
     # noinspection PyShadowingNames
     def loss_weight_adv_g(i):
         if n_g[0] <= i < n_g[1]:
             if content_loss_on_lr:
-                return 2e-3
+                return 2e-2
             else:
                 return 5e-2
         return 0
@@ -124,11 +132,13 @@ def gen_losses(net_content_extractor, identity):
         iden = n_identity[0] <= i < n_identity[1]
         assert not cont or not iden
         
+        f = 10.0 if content_loss_on_lr else 1.0
+        
         if cont:
-            return 1.0, net_content_extractor
+            return 1.0*f, net_content_extractor
         
         if iden:
-            return 10.0, identity
+            return 10.0*f, identity
         
         return 0, None
     
@@ -165,7 +175,7 @@ def gen_dataset(n_batch):
         # Spatial size of training images. All images will be resized to this size using a transformer.
         image_size_hr = (3, 128, 128)
     elif dataset_name == 'flickr':
-        image_size_hr = (3, 128, 128)
+        image_size_hr = (3, 256, 256)
     elif dataset_name == 'mnist':
         image_size_hr = (1, 28, 28)
     else:
@@ -187,7 +197,7 @@ def gen_dataset(n_batch):
     elif dataset_name == 'flickr':
         dataset_hr = dset.ImageFolder(root=dataroot,
                                       transform=transforms.Compose([
-                                          transforms.CenterCrop((image_size_hr[1] * 2, image_size_hr[2] * 2)),
+                                          # transforms.CenterCrop((image_size_hr[1] * 2, image_size_hr[2] * 2)),
                                           transforms.Resize(image_size_hr[1:]),
                                           transforms.ToTensor(),
                                           transforms.Normalize((.5, .5, .5), (.5, .5, .5))]))
