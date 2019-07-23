@@ -70,17 +70,23 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
         Le réseau est dans ce cas bien meilleur qu'un réseau x4 entraîné 'from scratch' (pour une même durée d'entraînement).
       - On peut geler toutes les couches à part celle rajoutée afin d'aller plus vite
       - Implémenté via "load_state_dict(strict=False)". Il y a des bugs e.g. https://github.com/pytorch/pytorch/pull/22545.
+      - Sûrement à cause des bugs (et donc l'absence de spectralNorm de bout en bout), le réseau donne de moins bons résultats
       - Les images de celeba sont trop petites pour le x8. La MSE est floue, le GAN invente un visage:
         ![Flou](./results/flou.png)       ![Invente](./results/invente.png)
     - Modèle supervisé ou non:
     ![Architecture](./results/architecture.png)
       - Les résultats sont meilleurs avec supervision, le mode non-supervisé est utile si on n'a pas accès à un dataset d'images en haute qualité
     
+  - 22/07
+    - Progressive Generator sans load_state_dict(strict=False)
+    - Tentatives d'entraînement x4 en non-supervisé
+    - Rédaction du compte rendu
   
 ## todo
   - ajouter des tests
   - ajouter des métriques
   - télécharger la même base de données que dans l'article pour pouvoir comparer
   - entraîner un réseau x8
+  - Progressive G et D
     
   
