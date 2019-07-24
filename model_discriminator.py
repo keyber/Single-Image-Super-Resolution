@@ -31,9 +31,9 @@ class Discriminator(nn.Module):
         
         assert len(list_n_features) == len(list_stride)
         
-        # taille des vecteurs d'entrée de la couche FC (calcul manuel pour être sûr, mais on pourrait mettre -1)
+        # taille des vecteurs d'entrée de la couche FC
         self.fc_in = w * h * list_n_features[-1] // (4 ** (sum(list_stride) - len(list_stride)))
-        
+        self.fc_mid = list_n_features[-1] * 2
         self.conv = nn.Sequential(
             # entrée
             sn(nn.Conv2d(in_channels=input_shape[0], out_channels=list_n_features[0], kernel_size=3, stride=list_stride[0], padding=1)),
@@ -46,10 +46,10 @@ class Discriminator(nn.Module):
         
         self.fc = nn.Sequential(
             # sortie
-            nn.Linear(self.fc_in, list_n_features[-1] * 2),
+            nn.Linear(self.fc_in, self.fc_mid),
             nn.LeakyReLU(),
             
-            nn.Linear(list_n_features[-1] * 2, 1),
+            nn.Linear(self.fc_mid, 1),
             nn.Sigmoid())
     
     def forward(self, x):
@@ -60,3 +60,17 @@ class Discriminator(nn.Module):
         x = self.fc(x)
         # print("dis", x.shape)
         return x
+    
+    def load_state_dict(self, state_dict, strict=True):
+        if strict:
+            nn.Module.load_state_dict(self, state_dict, strict)
+            return
+        
+        own_state = self.state_dict()
+        for name, param in state_dict.items():
+            if name not in own_state:
+                continue
+            try:
+                own_state[name].copy_(param)
+            except Exception as e:
+                print("dis: lecture échouée pour", name, "  -  ", e)
