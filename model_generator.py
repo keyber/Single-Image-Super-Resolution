@@ -115,25 +115,29 @@ class Generator(nn.Module):
                 x.requires_grad = False
 
 class GeneratorSuffix(nn.Module):
-    def __init__(self, prefix:Generator, freeze_prefix=False, **kwargs):
+    def __init__(self, prefix, freeze_prefix=False, **kwargs):
         super().__init__()
         self.base = prefix
-        n_features_last = prefix.n_features_last
+        self.n_features_last = prefix.n_features_last
         self.upscale = nn.Sequential(*[
-                        sn(nn.Conv2d(in_channels= n_features_last // 4, out_channels=n_features_last,
+                        sn(nn.Conv2d(in_channels=self.n_features_last // 4, out_channels=self.n_features_last,
                                      kernel_size=3, stride=1, padding=1)),
                         nn.PixelShuffle(upscale_factor=2),
                         nn.PReLU()])
+        # cache le parametre dans une liste pour qu'il ne soit vu qu'une seule fois
+        self.end = [prefix.end[0] if type(prefix.end)==list else prefix.end]
+        
         if freeze_prefix:
             prefix.freeze(**kwargs)
     
-    def forward(self, x):
+    def forward_no_end(self, x):
         x = self.base.forward_no_end(x)
-        
         x = self.upscale(x)
+        return x
         
-        x = self.base.end(x)
-        
+    def forward(self, x):
+        x = self.forward_no_end(x)
+        x = self.end[0](x)
         return x
 
 def _test_gen():
