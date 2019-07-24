@@ -12,7 +12,7 @@ def main():
     show_im = (test_lr, test_hr, img_list)
 
     # Affichage des résultats
-    utils.save_and_show(net_g, net_d, optimizerG, optimizerD, D_losses, G_losses, cont_loss, show_im, write_root)
+    utils.save_and_show(starting_epoch + num_epochs, net_g, net_d, optimizerG, optimizerD, D_losses, G_losses, cont_loss, show_im, write_root)
 
 
 def train_loop():
@@ -29,11 +29,11 @@ def train_loop():
     print_period = max(1, n_batch//10)
     t = time()
     
-    print("Starting Training Loop...")
-    for epoch in range(num_epochs):
+    for epoch in range(starting_epoch, starting_epoch + num_epochs):
         for i, (img_hr, img_hr2) in enumerate(dataloader_hr):
+            
             if i == n_batch - 1 or (plot_first and epoch==0 and i==0):
-                utils.save_curr_vis(img_list, test_lr, test_hr, net_g, G_losses, D_losses, cont_losses, plot_training)
+                utils.save_curr_vis(img_list, test_lr, test_hr if plot_usr else None, net_g, G_losses, D_losses, cont_losses, plot_training)
                 if i == n_batch - 1:
                     break
             
@@ -110,7 +110,7 @@ def train_loop():
             # Output training stats
             if i % print_period == 0:
                 print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G_adv: %.4f\tLoss_G_con: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
-                      % (epoch, num_epochs, i, n_batch,
+                      % (epoch, num_epochs + starting_epoch, i, n_batch,
                          errD.item(), errG_adv.item(), errG_cont.item(), D_x, D_G_z1, D_G_z2))
             
             # Save Losses for plotting later

@@ -6,6 +6,7 @@ import matplotlib.animation as animation
 import torch.nn.functional
 import os
 import multiprocessing
+import gc
 
 
 print_process = None
@@ -47,12 +48,17 @@ def _test_lr_from_hr():
     
 def save_curr_vis(img_list, img_lr, img_hr, netG, G_losses, D_losses, cont_losses, plot_training):
     global print_process
-    
+
     with torch.no_grad():
         fake_sr = netG(img_lr[:4]).detach().cpu()
-        fake_usr = netG(img_hr[:4]).detach().cpu()
-    img_list.append((vutils.make_grid(fake_sr, padding=0, normalize=True, nrow=2),
-                     vutils.make_grid(fake_usr, padding=0, normalize=True, nrow=2)))
+        if img_hr is not None:
+            fake_usr = netG(img_hr[:4]).detach().cpu()
+    
+    if img_hr is not None:
+        img_list.append((vutils.make_grid(fake_sr, padding=0, normalize=True, nrow=2),
+                         vutils.make_grid(fake_usr, padding=0, normalize=True, nrow=2)))
+    else:
+        img_list.append((vutils.make_grid(fake_sr, padding=0, normalize=True, nrow=2),))
     
     def f():
         plt.figure()
@@ -73,12 +79,12 @@ def save_curr_vis(img_list, img_lr, img_hr, netG, G_losses, D_losses, cont_losse
         print_process.start()
 
 
-def save_and_show(net_g, net_d, optimizerG, optimizerD, D_losses, G_losses, cont_losses, show_im, write_root):
+def save_and_show(epoch, net_g, net_d, optimizerG, optimizerD, D_losses, G_losses, cont_losses, show_im, write_root):
     if print_process is not None:
         print_process.terminate()
     
     # sauvegarde le réseau
-    write_path_ = _save(net_g, net_d, optimizerG, optimizerD, write_root)
+    write_path_ = _save(epoch, net_g, net_d, optimizerG, optimizerD, write_root)
     
     # attend que l'utilisateur soit là pour créer des figures
     input("appuyer sur une touche pour afficher")
@@ -87,7 +93,7 @@ def save_and_show(net_g, net_d, optimizerG, optimizerD, D_losses, G_losses, cont
     _anim(show_im, write_path_)
 
 
-def _save(net_g, net_d, optimizerG, optimizerD, write_root):
+def _save(epoch, net_g, net_d, optimizerG, optimizerD, write_root):
     if not input("sauvegarder ? Y/n") == "n":
         if not os.path.isdir(write_root):
             os.mkdir(write_root)
@@ -99,6 +105,7 @@ def _save(net_g, net_d, optimizerG, optimizerD, write_root):
             write_path = write_root + str(i)
         
         torch.save({
+            'epoch': epoch,
             'net_g': net_g.state_dict(),
             'net_d': net_d.state_dict(),
             'opti_g': optimizerG.state_dict(),
@@ -143,11 +150,13 @@ def _plot(D_losses, G_losses, cont_losses, show_im):
     plt.title("SR Images")
     plt.imshow(np.transpose(img_list[-1][0], (1, 2, 0)))
     
-    # Plot the SR from the last epoch
-    plt.subplot(2, 2, 4)
-    plt.axis("off")
-    plt.title("USR Images")
-    plt.imshow(np.transpose(img_list[-1][1], (1, 2, 0)))
+    if len(img_list[-1]) == 2:
+        # Plot the SR from the last epoch
+        plt.subplot(2, 2, 4)
+        plt.axis("off")
+        plt.title("USR Images")
+        plt.imshow(np.transpose(img_list[-1][1], (1, 2, 0)))
+    
     plt.show()
 
 
@@ -180,6 +189,18 @@ class SamplerRange(torch.utils.data.sampler.Sampler):
     
     def __len__(self):
         return self.b - self.a
+
+
+def mem_report():
+    s = 0
+    gc.collect()
+    for obj in gc.get_objects():
+        if torch.is_tensor(obj):
+            s += obj.nelement()
+    if s>mem_report.max_size:
+        mem_report.max_size=s
+        print("%.1e" % (s*4*2**-30))
+mem_report.max_size = 0
 
 if __name__ == '__main__':
     _test_lr_from_hr()
