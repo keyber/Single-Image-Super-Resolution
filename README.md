@@ -80,6 +80,7 @@ Repo du stage d'été de M1 (2018-2019) dans l'équipe MLIA (encadrant Patrick G
   - 22/07
     - Progressive Generator sans load_state_dict(strict=False)
     - Tentatives d'entraînement x4 en non-supervisé
+    - Tentatives d'entraînement x8 en supervisé
     - Rédaction du compte rendu
   
 ## todo
