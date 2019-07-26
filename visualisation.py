@@ -10,7 +10,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 list_scales=[2]
-progressive_gan_suffix = 0
+progressive_gan_suffix = 1
 
 factor = np.prod(list_scales) * (2 if progressive_gan_suffix else 1)
 def main():
@@ -41,7 +41,7 @@ def main():
                                       transforms.Normalize((.5, .5, .5), (.5, .5, .5))]))
     n_im = 1
     # dataset_hr = [dataset_hr[i] for i in range(-10, 0)]
-    dataloader_hr = torch.utils.data.DataLoader(dataset_hr, sampler=utils.SamplerRange(0, len(dataset_hr)), batch_size=n_im)
+    dataloader_hr = torch.utils.data.DataLoader(dataset_hr, sampler=utils.SamplerRange(0, len(dataset_hr)), batch_size=n_im, num_workers=2)
     with torch.no_grad():
         for hr, _ in dataloader_hr:
             lr = utils.lr_from_hr(hr, (image_size_lr, image_size_lr))
