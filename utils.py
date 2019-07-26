@@ -79,12 +79,12 @@ def save_curr_vis(img_list, img_lr, img_hr, netG, G_losses, D_losses, cont_losse
         print_process.start()
 
 
-def save_and_show(epoch, net_g, net_d, optimizerG, optimizerD, D_losses, G_losses, cont_losses, show_im, write_root):
+def save_and_show(epoch, net_g, net_d, optimizerG, optimizerD, D_losses, G_losses, cont_losses, show_im, dis_list_old, write_root):
     if print_process is not None:
         print_process.terminate()
     
     # sauvegarde le réseau
-    write_path_ = _save(epoch, net_g, net_d, optimizerG, optimizerD, write_root)
+    write_path_ = _save(epoch, net_g, net_d, optimizerG, optimizerD, dis_list_old, write_root)
     
     # attend que l'utilisateur soit là pour créer des figures
     input("appuyer sur une touche pour afficher")
@@ -93,7 +93,7 @@ def save_and_show(epoch, net_g, net_d, optimizerG, optimizerD, D_losses, G_losse
     _anim(show_im, write_path_)
 
 
-def _save(epoch, net_g, net_d, optimizerG, optimizerD, write_root):
+def _save(epoch, net_g, net_d, optimizerG, optimizerD, dis_list_old, write_root):
     if not input("sauvegarder ? Y/n") == "n":
         if not os.path.isdir(write_root):
             os.mkdir(write_root)
@@ -109,7 +109,8 @@ def _save(epoch, net_g, net_d, optimizerG, optimizerD, write_root):
             'net_g': net_g.state_dict(),
             'net_d': net_d.state_dict(),
             'opti_g': optimizerG.state_dict(),
-            'opti_d': optimizerD.state_dict()
+            'opti_d': optimizerD.state_dict(),
+            'dis_list': dis_list_old
         }, write_path)
         
         print("réseau sauvegardé dans le fichier", write_path)

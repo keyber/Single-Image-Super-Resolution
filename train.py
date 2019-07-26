@@ -12,13 +12,13 @@ def main():
     show_im = (test_lr, test_hr, img_list)
 
     # Affichage des résultats
-    utils.save_and_show(starting_epoch + num_epochs, net_g, net_d, optimizerG, optimizerD, D_losses, G_losses, cont_loss, show_im, write_root)
+    utils.save_and_show(starting_epoch + num_epochs, net_g, net_d, optimizerG, optimizerD,
+                        D_losses, G_losses, cont_loss, show_im,
+                        dis_list_old if dis_list_old_save else [],
+                        write_root)
 
 
 def train_loop():
-    # ensemble d'anciennes images générées par G
-    list_fakes = []
-    
     # lists to keep track of progress
     img_list = []
     G_losses = []
@@ -60,15 +60,15 @@ def train_loop():
                 if dis_list_old_cpu:
                     curr_fake = curr_fake.cpu()
                 
-                D_G_z1, D_x, errD = adversarial_loss_d(img_hr, curr_fake, list_fakes)
+                D_G_z1, D_x, errD = adversarial_loss_d(img_hr, curr_fake, dis_list_old)
 
                 # sauvegarde un batch sur 10
                 if i % dis_list_old_freq == 0:
                     # écrase un ancien aléatoirement pour ne pas prendre trop de RAM
-                    if len(list_fakes) == dis_list_old_len:
-                        list_fakes[random.randint(0, dis_list_old_len-1)] = curr_fake
+                    if len(dis_list_old) == dis_list_old_len:
+                        dis_list_old[random.randint(0, dis_list_old_len - 1)] = curr_fake
                     else:
-                        list_fakes.append(curr_fake)
+                        dis_list_old.append(curr_fake)
 
                 errD *= lw_adv_d
                 errD.backward()

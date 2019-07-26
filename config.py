@@ -21,7 +21,7 @@ import numpy as np
 progressive_gan_suffix = 2
 
 # content loss sur les images basse résolution comme dans AmbientGAN
-content_loss_on_lr = True
+content_loss_on_lr = False
 
 #root directory for trained models
 write_root = "/local/beroukhim/srgan_trained/"
@@ -35,7 +35,7 @@ dataset_name, dataroot = "celeba", "/local/beroukhim/data/celeba"
 plot_training = False
 
 # Learning rate for optimizers
-lr = 1e-4
+lr = 1e-5
 lr_decay = True
 
 # Batch size during training
@@ -43,12 +43,15 @@ batch_size = 16
 n_batch = -1
 
 # Number of training epochs
-num_epochs = 10
+num_epochs = 3
 
-dis_list_old_len = 10  # nombre max de batch sauvegardés
-dis_list_old_freq = 10  # fréquence de sauvegarde des batchs
-dis_list_old_ratio = .1  # ratio de batchs de la liste tirés aléatoirement pour être présentés à D
-dis_list_old_cpu = True  # stocke la liste sur le CPU (à utiliser pour enlever de la charge sur le GPU)
+# ensemble d'anciennes images générées par G
+dis_list_old = None
+dis_list_old_len = 1000 # nombre max de batch sauvegardés
+dis_list_old_freq = 1 # fréquence de sauvegarde des batchs
+dis_list_old_ratio = .01 # ratio de batchs de la liste tirés aléatoirement pour être présentés à D
+dis_list_old_cpu = True # stocke la liste sur le CPU (à utiliser pour enlever de la charge sur le GPU)
+dis_list_old_save = True # sauvegarde la liste à la fin de l'entraînement
 
 # facteurs d'augmentations des couches de G
 list_scales = [2]  # le réseau de base est en x2, on rajoute des upsample via des suffixes
@@ -64,7 +67,7 @@ plot_first = True
 print("écriture dans:", write_root)
 print("progressive_gan_suffix:", progressive_gan_suffix)
 print("content_loss_on_lr:", content_loss_on_lr)
-print("lr_decay", lr_decay)
+print("lr_decay:", lr_decay)
 if plot_training:
     print("PLOT TRAINING PEUT FAIRE PLANTER LE CODE SI LE SERVEUR X EST INACCESSIBLE")
 print("use_sn:", use_sn, "list_scales:", list_scales)
@@ -84,7 +87,7 @@ def gen_modules(checkpoint, ngpu):
             net_g = GeneratorSuffix(net_g)
             # net_d = DiscriminatorSuffix(net_d)
     
-    if checkpoint is not None:
+    if checkpoint != {}:
         net_g.load_state_dict(checkpoint['net_g'], strict=False)
         net_d.load_state_dict(checkpoint['net_d'], strict=False)
     
@@ -122,14 +125,18 @@ def gen_losses(net_content_extractor, identity):
     m = float("inf")
     n_g = 0, m
     n_d = 0, m
-    n_content = 0, 0
-    n_identity = 0, m
+    if content_loss_on_lr:
+        n_content = 0, 0
+        n_identity = 0, m
+    else:
+        n_content = 0, m
+        n_identity = 0, 0
     
     # noinspection PyShadowingNames
     def loss_weight_adv_g(i):
         if n_g[0] <= i < n_g[1]:
             if content_loss_on_lr:
-                return 1e-2
+                return 5e-3
             else:
                 return 5e-2
         return 0
@@ -286,7 +293,7 @@ def gen_optimizers(checkpoint):
     optimizerG = optim.Adam(net_g.parameters(), lr=lr, betas=(.9, 0.999))
     optimizerD = optim.Adam(net_d.parameters(), lr=lr, betas=(.9, 0.999))
     
-    if checkpoint is not None:
+    if checkpoint != {}:
         try:
             optimizerG.load_state_dict(checkpoint['opti_g'])
             optimizerD.load_state_dict(checkpoint['opti_d'])
@@ -303,21 +310,32 @@ def gen_checkpoint():
         path = input("entrer le chemin de sauvegarde du réseau à charger:\n")
         checkpoint = torch.load(path, map_location='cpu')
         print("lecture réussie")
-        starting_epoch = checkpoint['epoch'] if 'epoch' in checkpoint else 0
     except OSError as e:
-        checkpoint = None
-        starting_epoch = 0
+        checkpoint = {}
         print("lecture échouée", e)
     
+    starting_epoch = checkpoint.get('epoch', 0)
     print("starting_epoch", starting_epoch)
     
     return checkpoint, starting_epoch
 
+# noinspection PyShadowingNames
+def gen_dis_list(checkpoint):
+    # charge la liste d'images générées si elles sont de la bonne taille
+    if progressive_gan_suffix % 2 == 0:
+        l = checkpoint.get('dis_list', [])
+        print("chargement de", len(l), "anciennes images générées")
+    else:
+        l = []
+        print("les anciennes images générées ne correspondent pas")
+    return l
+    
 
 gen_seed()
 device, _ngpu = gen_device()
 image_size_lr, image_size_hr, dataloader_hr, (test_hr, test_lr), n_batch = gen_dataset(n_batch)
 checkpoint, starting_epoch =                                               gen_checkpoint()
+dis_list_old =                                                             gen_dis_list(checkpoint)
 net_g, net_d, identity, net_content_extractor, criterion =                 gen_modules(checkpoint, _ngpu)
 optimizerG, optimizerD =                                                   gen_optimizers(checkpoint)
 loss_weight_adv_g, loss_weight_adv_d, loss_weight_cont =                   gen_losses(net_content_extractor, identity)
