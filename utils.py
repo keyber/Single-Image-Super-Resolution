@@ -7,6 +7,7 @@ import torch.nn.functional
 import os
 import multiprocessing
 import gc
+import pickle
 
 
 print_process = None
@@ -89,7 +90,7 @@ def save_and_show(epoch, net_g, net_d, optimizerG, optimizerD, D_losses, G_losse
     # attend que l'utilisateur soit là pour créer des figures
     input("appuyer sur une touche pour afficher")
     
-    _plot(D_losses, G_losses, cont_losses, show_im)
+    _plot(D_losses, G_losses, cont_losses, show_im, write_path_)
     _anim(show_im, write_path_)
 
 
@@ -118,65 +119,81 @@ def _save(epoch, net_g, net_d, optimizerG, optimizerD, dis_list_old, write_root)
     return None
 
 
-def _plot(D_losses, G_losses, cont_losses, show_im):
+def _plot(D_losses, G_losses, cont_losses, show_im, write_path):
     test_lr, test_hr, img_list = show_im
     
-    plt.figure(figsize=(10, 5))
-    plt.title("Generator and Discriminator Loss During Training")
-    plt.plot(G_losses, label="G")
-    plt.plot(D_losses, label="D")
-    plt.plot(cont_losses, label="cont")
-    plt.xlabel("iterations")
-    plt.ylabel("Loss")
-    plt.legend()
-    
-    plt.figure(figsize=(8, 8))
-    # Plot the LR images
-    plt.subplot(2, 2, 1)
-    plt.axis("off")
-    plt.title("LR Images")
-    plt.imshow(np.transpose(
-        vutils.make_grid(test_lr[:4].detach().cpu(), padding=0, normalize=True, nrow=2), (1, 2, 0)))
-    
-    # Plot the HR images
-    plt.subplot(2, 2, 3)
-    plt.axis("off")
-    plt.title("HR Images")
-    plt.imshow(np.transpose(
-        vutils.make_grid(test_hr[:4].detach().cpu(), padding=0, normalize=True, nrow=2).cpu(), (1, 2, 0)))
-    
-    # Plot the SR from the last epoch
-    plt.subplot(2, 2, 2)
-    plt.axis("off")
-    plt.title("SR Images")
-    plt.imshow(np.transpose(img_list[-1][0], (1, 2, 0)))
-    
-    if len(img_list[-1]) == 2:
-        # Plot the SR from the last epoch
-        plt.subplot(2, 2, 4)
+    try:
+        plt.figure(figsize=(10, 5))
+        plt.title("Generator and Discriminator Loss During Training")
+        plt.plot(G_losses, label="G")
+        plt.plot(D_losses, label="D")
+        plt.plot(cont_losses, label="cont")
+        plt.xlabel("iterations")
+        plt.ylabel("Loss")
+        plt.legend()
+        
+        plt.figure(figsize=(8, 8))
+        # Plot the LR images
+        plt.subplot(2, 2, 1)
         plt.axis("off")
-        plt.title("USR Images")
-        plt.imshow(np.transpose(img_list[-1][1], (1, 2, 0)))
-    
-    plt.show()
+        plt.title("LR Images")
+        plt.imshow(np.transpose(
+            vutils.make_grid(test_lr[:4].detach().cpu(), padding=0, normalize=True, nrow=2), (1, 2, 0)))
+        
+        # Plot the HR images
+        plt.subplot(2, 2, 3)
+        plt.axis("off")
+        plt.title("HR Images")
+        plt.imshow(np.transpose(
+            vutils.make_grid(test_hr[:4].detach().cpu(), padding=0, normalize=True, nrow=2).cpu(), (1, 2, 0)))
+        
+        # Plot the SR from the last epoch
+        plt.subplot(2, 2, 2)
+        plt.axis("off")
+        plt.title("SR Images")
+        plt.imshow(np.transpose(img_list[-1][0], (1, 2, 0)))
+        
+        if len(img_list[-1]) == 2:
+            # Plot the SR from the last epoch
+            plt.subplot(2, 2, 4)
+            plt.axis("off")
+            plt.title("USR Images")
+            plt.imshow(np.transpose(img_list[-1][1], (1, 2, 0)))
+        
+        plt.show()
+
+    except Exception as e:
+        print("affichage loss échoué", e)
+        if write_path is not None:
+            with open(write_path + ".loss", "wb") as f:
+                pickle.dump({'G': G_losses,
+                         'D': D_losses,
+                         'cont':cont_losses}, f)
 
 
 def _anim(show_im, write_path):
     _, _, img_list = show_im
-    fig = plt.figure(figsize=(8, 8))
-    plt.axis("off")
-    # np.transpose inverse les axes pour remettre le channel des couleurs en dernier
-    ims = [[plt.imshow(np.transpose(i[0], (1, 2, 0)), animated=True)] for i in img_list]
-    
-    # il faut stocker l'animation dans une variable sinon l'animation plante
-    ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
-    
-    writer = animation.writers['ffmpeg'](fps=10, bitrate=1800)
-    
-    if write_path is not None:
-        ani.save(write_path + "_ani.mp4", writer=writer)
-    
-    plt.show()
+
+    try:
+        fig = plt.figure(figsize=(8, 8))
+        plt.axis("off")
+        # np.transpose inverse les axes pour remettre le channel des couleurs en dernier
+        ims = [[plt.imshow(np.transpose(i[0], (1, 2, 0)), animated=True)] for i in img_list]
+        
+        # il faut stocker l'animation dans une variable sinon l'animation plante
+        ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
+        
+        writer = animation.writers['ffmpeg'](fps=10, bitrate=1800)
+        
+        if write_path is not None:
+            ani.save(write_path + ".mp4", writer=writer)
+        
+        plt.show()
+    except Exception as e:
+        print("affichage animation échoué", e)
+        if write_path is not None:
+            with open(write_path + ".list", "wb") as f:
+                pickle.dump(img_list, f)
 
 
 class SamplerRange(torch.utils.data.sampler.Sampler):
